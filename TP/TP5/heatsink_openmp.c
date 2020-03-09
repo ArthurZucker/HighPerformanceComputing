@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdbool.h>
+#include <sys/time.h>
 
 /* Auteur : Charles Bouillaguet <charles.bouillaguet@univ-lille.fr>
    USAGE  : compiler avec -lm (et -O3 tant qu'à faire)
@@ -74,6 +75,13 @@ double euros_per_kg = 0.083;
 const double Stefan_Boltzmann = 5.6703e-8;	/* (W / m^2 / K^4), rayonnement du corps noir */
 const double heat_transfer_coefficient = 10;	/* Coefficient de convection thermique (W / m^2 / K) */
 double CPU_surface;
+
+double my_gettimeofday()
+{
+	struct timeval tmp_time;
+	gettimeofday(&tmp_time, NULL);
+	return tmp_time.tv_sec + (tmp_time.tv_usec * 1.0e-6L);
+}
 
 /* renvoie True si le CPU est en contact avec le dissipateur au point (x,y).
    Ceci décrit un AMD EPYC "Rome". */
@@ -182,6 +190,7 @@ int main()
 	int n = ceil(L / dl);
 	int m = ceil(E / dl);
 	int o = ceil(l / dl);
+	double debut, fin;
 
 	fprintf(stderr, "DISSIPATEUR\n");
 	fprintf(stderr, "\tDimension (cm) [x,y,z] = %.1f x %.1f x %.1f\n", 100 * L, 100 * E, 100 * l);
@@ -202,7 +211,7 @@ int main()
 		perror("Impossible d'allouer T et R");
 		exit(1);
 	}
-
+	debut = my_gettimeofday();
 	/* initialement le radiateur est à la température du fluide de watercooling */
 	for (int u = 0; u < n * m * o; u++)
 		R[u] = T[u] = watercooling_T + 273.15;
@@ -219,7 +228,6 @@ int main()
 			int v = k * n * m;
 			do_xy_plane(T, R, v, n, m, o, k);
 		}
-
 		/* toutes les secondes, on teste la convergence et on affiche un petit compte-rendu */
 		if (n_steps % ((int)(1 / dt)) == 0) {
 			double delta_T = 0;
@@ -244,7 +252,7 @@ int main()
 		t += dt;
 		n_steps += 1;
 	}
-
+	fin = my_gettimeofday();
 #ifdef DUMP_STEADY_STATE
 	printf("###### STEADY STATE; t = %.1f\n", t);
 	for (int k = 0; k < o; k++) {	// z
@@ -259,5 +267,9 @@ int main()
 	printf("\n");
 	fprintf(stderr, "Rendu graphique : python3 rendu_picture_steady.py [filename.txt] %d %d %d\n", n, m, o);
 #endif
+
+fprintf(stderr, "Temps total de calcul : %g sec\n", fin - debut);
+fprintf(stdout, "%g\n", fin - debut);
+
 	exit(EXIT_SUCCESS);
 }
