@@ -29,8 +29,8 @@ double my_gettimeofday()
 }
 
 /* on peut changer la matière du dissipateur, sa taille, la puissance du CPU, etc. */
-#define GOLD
-#define MEDIUM			/* MEDIUM est plus rapide, FAST est encore plus rapide (debuging) */
+#define IRON
+#define FAST			/* MEDIUM est plus rapide, FAST est encore plus rapide (debuging) */
 #define DUMP_STEADY_STATE
 
 const double L = 0.15;		/* largeur (x) du dissipateur thermique (m) */
@@ -242,10 +242,12 @@ int main(int argc, char *argv[])
 		//________________________________________________________________
 		//_______________ A paralleliser__________________________________
 		// Irecv et Isend entrainaient des bugs a cause du Wait All
-		MPI_Request request[4];
-		if (rang<p-1) MPI_Isend(&T[((rang+1)*(o/p)*n*m)-n*m]				, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD,&request[0]);	//On envoie à son rang+1 notre dernière ligne
+
+
+		MPI_Request request[4] = {MPI_REQUEST_NULL, MPI_REQUEST_NULL, MPI_REQUEST_NULL, MPI_REQUEST_NULL};
+		if (rang<p-1) MPI_Issend(&T[((rang+1)*(o/p)*n*m)-n*m]				, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD,&request[0]);	//On envoie à son rang+1 notre dernière ligne
 		if (rang > 0) MPI_Irecv(&T[((rang)*(o/p)*n*m)-n*m]					, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD,&request[1]);	//On reçois de son rang-1 sa dernière ligne
-		if (rang > 0) MPI_Isend(&T[rang*(o/p)*n*m]									, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD,&request[2]);	//On envoie à son rang-1 notre première ligne
+		if (rang > 0) MPI_Issend(&T[rang*(o/p)*n*m]									, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD,&request[2]);	//On envoie à son rang-1 notre première ligne
 		if (rang<p-1) MPI_Irecv(&T[(rang+1)*(o/p)*n*m]							, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD,&request[3]);	//On reçois de son rang+1 sa première ligne
 
 		// Ici on update les températures propre au bloc que l'on traite tout au long du programme
@@ -255,6 +257,8 @@ int main(int argc, char *argv[])
 			do_xy_plane(T, R, v, n, m, o, k);
 		}
 		MPI_Waitall(4,request,MPI_STATUSES_IGNORE);
+		do_xy_plane(T, R, rang*(o/p)*n*m, n, m, o, rang*(o/p));
+		do_xy_plane(T, R,  ((rang+1)*(o/p)-1)*n*m, n, m, o,  ((rang+1)*(o/p)-1));
 		//________________________________________________________________
 		//________________________________________________________________
 		//________________________________________________________________
@@ -270,8 +274,10 @@ int main(int argc, char *argv[])
 				delta_T += (R[u] - T[u]) * (R[u] - T[u]);
 				if (R[u] > max)
 					max = R[u];
-			}
+			}// Maintenant on transmet à tous la somme des epsilons, on les somme tous et on les renvoient tous
+			MPI_Allreduce(MPI_IN_PLACE,&delta_T,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 			delta_T = sqrt(delta_T) / dt;
+
 			//step 2 reductiton et somme
 			if (rang == 0) {
 				// Tous les processus envoie à la racine qui choisis le max et affiche ensuite pour l'utilisateur
@@ -282,8 +288,6 @@ int main(int argc, char *argv[])
 				//Si on est pas la racine, on envoie juste le max avec la procedure reduce
 				MPI_Reduce(&max,&max,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
 			}
-			// Maintenant on transmet à tous la somme des epsilons, on les somme tous et on les renvoient tous
-			MPI_Allreduce(MPI_IN_PLACE,&delta_T,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 			//________________________________________________________________
 			//________________________________________________________________
 			//________________________________________________________________
