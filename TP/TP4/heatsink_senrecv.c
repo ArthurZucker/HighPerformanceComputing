@@ -272,7 +272,7 @@ int main(int argc, char *argv[])
 					max = R[u];
 			}
 			// Maintenant on transmet à tous la somme des epsilons, on les somme tous et on les renvoient tous
-			MPI_Allreduce(MPI_IN_PLACE,&delta_T,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+			MPI_Allreduce(MPI_IN_PLACE,&delta_T,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);x
 			delta_T = sqrt(delta_T) / dt;
 
 			//step 2 reductiton et somme
