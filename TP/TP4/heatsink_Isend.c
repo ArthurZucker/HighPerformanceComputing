@@ -249,6 +249,7 @@ int main(int argc, char *argv[])
 		if (rang > 0) MPI_Irecv(&T[((rang)*(o/p)*n*m)-n*m]					, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD,&request[1]);	//On reçois de son rang-1 sa dernière ligne
 		if (rang > 0) MPI_Issend(&T[rang*(o/p)*n*m]									, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD,&request[2]);	//On envoie à son rang-1 notre première ligne
 		if (rang<p-1) MPI_Irecv(&T[(rang+1)*(o/p)*n*m]							, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD,&request[3]);	//On reçois de son rang+1 sa première ligne
+
 		// Ici on update les températures propre au bloc que l'on traite tout au long du programme
 		// Le bloc va de rang*(o/p)*n*m à (rang+1)*(o/p)*n*m
 		for (int k = (rang*(o/p)+1); k < ((rang+1)*(o/p)-1); k++) {

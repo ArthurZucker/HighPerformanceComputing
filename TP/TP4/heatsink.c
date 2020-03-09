@@ -29,7 +29,7 @@ double my_gettimeofday()
 }
 
 /* on peut changer la matière du dissipateur, sa taille, la puissance du CPU, etc. */
-#define IRON
+#define GOLD
 #define MEDIUM			/* MEDIUM est plus rapide, FAST est encore plus rapide (debuging) */
 #define DUMP_STEADY_STATE
 
