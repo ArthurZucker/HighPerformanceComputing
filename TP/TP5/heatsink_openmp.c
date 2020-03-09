@@ -3,11 +3,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdbool.h>
-#include <time.h>		/* chronometrage */
-#include <string.h>		/* pour memset */
-#include <math.h>
-#include <sys/time.h>
-#include <mpi.h>
 
 /* Auteur : Charles Bouillaguet <charles.bouillaguet@univ-lille.fr>
    USAGE  : compiler avec -lm (et -O3 tant qu'à faire)
@@ -21,16 +16,10 @@
                 été écrit de façon à rendre le plus évident possible le
                 principe physique de la simulation).
 */
-double my_gettimeofday()
-{
-	struct timeval tmp_time;
-	gettimeofday(&tmp_time, NULL);
-	return tmp_time.tv_sec + (tmp_time.tv_usec * 1.0e-6L);
-}
 
 /* on peut changer la matière du dissipateur, sa taille, la puissance du CPU, etc. */
-#define GOLD
-#define MEDIUM			/* MEDIUM est plus rapide, FAST est encore plus rapide (debuging) */
+#define IRON
+#define FAST			/* MEDIUM est plus rapide, FAST est encore plus rapide (debuging) */
 #define DUMP_STEADY_STATE
 
 const double L = 0.15;		/* largeur (x) du dissipateur thermique (m) */
@@ -186,34 +175,26 @@ static inline void do_xy_plane(const double *T, double *R, int v, int n, int m, 
 	}
 }
 
-int main(int argc, char *argv[])
+int main()
 {
 	CPU_surface = CPU_contact_surface();
 	double V = L * l * E;
 	int n = ceil(L / dl);
 	int m = ceil(E / dl);
 	int o = ceil(l / dl);
-	/* Chronometrage */
-	double debut, fin;
-	/* Initialisation de MPI */
-	int rang,p;
-	MPI_Status status;
-	MPI_Init(&argc,&argv);
-	MPI_Comm_size (MPI_COMM_WORLD, &p );
-	MPI_Comm_rank (MPI_COMM_WORLD,&rang);
-	if (rang==0) {
-		fprintf(stderr, "DISSIPATEUR\n");
-		fprintf(stderr, "\tDimension (cm) [x,y,z] = %.1f x %.1f x %.1f\n", 100 * L, 100 * E, 100 * l);
-		fprintf(stderr, "\tVolume = %.1f cm^3\n", V * 1e6);
-		fprintf(stderr, "\tMasse = %.2f kg\n", V * sink_density);
-		fprintf(stderr, "\tPrix = %.2f €\n", V * sink_density * euros_per_kg);
-		fprintf(stderr, "SIMULATION\n");
-		fprintf(stderr, "\tGrille (x,y,z) = %d x %d x %d (%.1fMo)\n", n, m, o, 7.6293e-06 * n * m * o);
-		fprintf(stderr, "\tdt = %gs\n", dt);
-		fprintf(stderr, "CPU\n");
-		fprintf(stderr, "\tPuissance = %.0fW\n", CPU_TDP);
-		fprintf(stderr, "\tSurface = %.1f cm^2\n", CPU_surface * 10000);
-	}
+
+	fprintf(stderr, "DISSIPATEUR\n");
+	fprintf(stderr, "\tDimension (cm) [x,y,z] = %.1f x %.1f x %.1f\n", 100 * L, 100 * E, 100 * l);
+	fprintf(stderr, "\tVolume = %.1f cm^3\n", V * 1e6);
+	fprintf(stderr, "\tMasse = %.2f kg\n", V * sink_density);
+	fprintf(stderr, "\tPrix = %.2f €\n", V * sink_density * euros_per_kg);
+	fprintf(stderr, "SIMULATION\n");
+	fprintf(stderr, "\tGrille (x,y,z) = %d x %d x %d (%.1fMo)\n", n, m, o, 7.6293e-06 * n * m * o);
+	fprintf(stderr, "\tdt = %gs\n", dt);
+	fprintf(stderr, "CPU\n");
+	fprintf(stderr, "\tPuissance = %.0fW\n", CPU_TDP);
+	fprintf(stderr, "\tSurface = %.1f cm^2\n", CPU_surface * 10000);
+
 	/* température de chaque cellule, en degré Kelvin. */
 	double *T = malloc(n * m * o * sizeof(*T));
 	double *R = malloc(n * m * o * sizeof(*R));
@@ -222,13 +203,10 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-
-	/* Initialisation  du chronometre */
-	debut = my_gettimeofday();
-
 	/* initialement le radiateur est à la température du fluide de watercooling */
-	for (int u =n*m*rang*o/p ; u < n*m*(rang+1)*o/p; u++) //modification : o/p puisque que chaque processus n'a qu'une partie de blocs
+	for (int u = 0; u < n * m * o; u++)
 		R[u] = T[u] = watercooling_T + 273.15;
+
 	/* c'est parti, on allume le CPU et on simule jusqu'à avoir atteint le régime stationnaire. */
 	double t = 0;
 	int n_steps = 0;
@@ -236,62 +214,24 @@ int main(int argc, char *argv[])
 
 	/* simulation des pas de temps */
 	while (convergence == 0) {
-
 		/* Met à jour toutes les cellules. On traite les plans xy par z croissant. */
-		//________________________________________________________________
-		//________________________________________________________________
-		//_______________ A paralleliser__________________________________
-		// Irecv et Isend entrainaient des bugs a cause du Wait All
-		if (rang%2 == 0) {
-			if (rang<p-1) MPI_Send(&T[((rang+1)*(o/p)*n*m)-n*m]				, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD);					//On envoie à son rang+1 notre dernière ligne
-			if (rang > 0) MPI_Recv(&T[((rang)*(o/p)*n*m)-n*m]					, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD,&status);	//On reçois de son rang-1 sa dernière ligne
-			if (rang > 0) MPI_Send(&T[rang*(o/p)*n*m]									, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD);					//On envoie à son rang-1 notre première ligne
-			if (rang<p-1) MPI_Recv(&T[(rang+1)*(o/p)*n*m]							, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD,&status);	//On reçois de son rang+1 sa première ligne
-		}
-		else{
-			if (rang > 0) MPI_Recv(&T[((rang)*(o/p)*n*m)-n*m]					, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD,&status);	//On reçois de son rang-1 sa dernière ligne
-			if (rang<p-1) MPI_Send(&T[((rang+1)*(o/p)*n*m)-n*m]				, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD);					//On envoie à son rang+1 notre dernière ligne
-			if (rang<p-1) MPI_Recv(&T[(rang+1)*(o/p)*n*m]							, n*m, MPI_DOUBLE,rang+1,0,MPI_COMM_WORLD,&status);	//On reçois de son rang+1 sa première ligne
-			if (rang > 0) MPI_Send(&T[rang*(o/p)*n*m]									, n*m, MPI_DOUBLE,rang-1,0,MPI_COMM_WORLD);					//On envoie à son rang-1 notre première ligne
-		}
-		// Ici on update les températures propre au bloc que l'on traite tout au long du programme
-		// Le bloc va de rang*(o/p)*n*m à (rang+1)*(o/p)*n*m
-		for (int k = rang*(o/p); k < (rang+1)*(o/p); k++) {
+		for (int k = 0; k < o; k++) {	// z
 			int v = k * n * m;
 			do_xy_plane(T, R, v, n, m, o, k);
 		}
-		//________________________________________________________________
-		//________________________________________________________________
-		//________________________________________________________________
+
 		/* toutes les secondes, on teste la convergence et on affiche un petit compte-rendu */
 		if (n_steps % ((int)(1 / dt)) == 0) {
 			double delta_T = 0;
 			double max = -INFINITY;
-			//________________________________________________________________
-			//________________________________________________________________
-			//_______________ A paralleliser__________________________________
-			//step 1 calculer le maximum local du bloc que l'on traite
-			for (int u =  n * m * (o/p)*rang; u < n * m * (o/p)*(rang+1); u++) {
+			#pragma omp parallel for reduction(+:delta_T)reduction(max:max)
+			for (int u = 0; u < n * m * o; u++) {
 				delta_T += (R[u] - T[u]) * (R[u] - T[u]);
 				if (R[u] > max)
 					max = R[u];
 			}
 			delta_T = sqrt(delta_T) / dt;
-			//step 2 reductiton et somme
-			if (rang == 0) {
-				// Tous les processus envoie à la racine qui choisis le max et affiche ensuite pour l'utilisateur
-				MPI_Reduce(MPI_IN_PLACE,&max,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
-				fprintf(stderr, "t = %.1fs ; T_max = %.1f°C ; convergence = %g\n", t, max - 273.15, delta_T);
-			}
-			else{
-				//Si on est pas la racine, on envoie juste le max avec la procedure reduce
-				MPI_Reduce(&max,&max,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
-			}
-			// Maintenant on transmet à tous la somme des epsilons, on les somme tous et on les renvoient tous
-			MPI_Allreduce(MPI_IN_PLACE,&delta_T,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-			//________________________________________________________________
-			//________________________________________________________________
-			//________________________________________________________________
+			fprintf(stderr, "t = %.1fs ; T_max = %.1f°C ; convergence = %g\n", t, max - 273.15, delta_T);
 			if (delta_T < 0.1)
 				convergence = 1;
 		}
@@ -300,46 +240,24 @@ int main(int argc, char *argv[])
 		double *tmp = R;
 		R = T;
 		T = tmp;
+
 		t += dt;
 		n_steps += 1;
 	}
-	fin = my_gettimeofday();
-	// Le calcul est fini pour les processus non racine on affiche les temps de calcul
-	// Mais sans oublier d'envoyer à la racine le bloc que l'on a traite
-	fprintf(stdout, "Temps de calcul pour le processus %d : %g sec\n",rang, fin - debut);
-	if (rang != 0) {
-			MPI_Ssend(&T[rang*(o/p)*n*m]								, (o/p)*n*m, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
-	}
-	else{
-		// Root doit écrire le tableau final, on recoit les blocs dans un ordre aléatoire
-		for (size_t i = 0; i < p-1; i++) {
-			double *temp = malloc((o/p)*n*m*sizeof(double));
-			MPI_Recv(temp,(o/p)*n*m,MPI_DOUBLE,MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
-			int giver = status.MPI_SOURCE;
-			for (size_t ii = 0; ii < (o/p)*n*m; ii++) {
-				T[giver*(o/p)*n*m+ii] = temp[ii];
+
+#ifdef DUMP_STEADY_STATE
+	printf("###### STEADY STATE; t = %.1f\n", t);
+	for (int k = 0; k < o; k++) {	// z
+		printf("# z = %g\n", k * dl);
+		for (int j = 0; j < m; j++) {	// y
+			for (int i = 0; i < n; i++) {	// x
+				printf("%.1f ", T[k * n * m + j * n + i] - 273.15);
 			}
-			free(temp);
+			printf("\n");
 		}
-		FILE *fp;
-		fp = fopen("./res.txt", "w+");
-	#ifdef DUMP_STEADY_STATE
-		printf("###### STEADY STATE; t = %.1f\n", t);
-		for (int k = 0; k < o; k++) {	// z
-			fprintf(fp,"# z = %g\n", k * dl);
-			for (int j = 0; j < m; j++) {	// y
-				for (int i = 0; i < n; i++) {	// x
-					fprintf(fp,"%.1f ", T[k * n * m + j * n + i] - 273.15);
-				}
-				fprintf(fp,"\n");
-			}
-		}
-		fprintf(fp,"\n");
-		fprintf(stderr, "Rendu graphique : python3 rendu_picture_steady.py [filename.txt] %d %d %d\n", n, m, o);
-	#endif
 	}
-	free(T);
-	free(R);
-	MPI_Finalize();
+	printf("\n");
+	fprintf(stderr, "Rendu graphique : python3 rendu_picture_steady.py [filename.txt] %d %d %d\n", n, m, o);
+#endif
 	exit(EXIT_SUCCESS);
 }
