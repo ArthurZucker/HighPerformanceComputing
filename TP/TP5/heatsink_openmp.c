@@ -215,6 +215,7 @@ int main()
 	/* simulation des pas de temps */
 	while (convergence == 0) {
 		/* Met à jour toutes les cellules. On traite les plans xy par z croissant. */
+		#pragma omp parallel for
 		for (int k = 0; k < o; k++) {	// z
 			int v = k * n * m;
 			do_xy_plane(T, R, v, n, m, o, k);
@@ -244,20 +245,21 @@ int main()
 		t += dt;
 		n_steps += 1;
 	}
-
-#ifdef DUMP_STEADY_STATE
+	FILE *fp;
+	fp = fopen("./res.txt", "w+");
+	#ifdef DUMP_STEADY_STATE
 	printf("###### STEADY STATE; t = %.1f\n", t);
 	for (int k = 0; k < o; k++) {	// z
-		printf("# z = %g\n", k * dl);
+		fprintf(fp,"# z = %g\n", k * dl);
 		for (int j = 0; j < m; j++) {	// y
 			for (int i = 0; i < n; i++) {	// x
-				printf("%.1f ", T[k * n * m + j * n + i] - 273.15);
+				fprintf(fp,"%.1f ", T[k * n * m + j * n + i] - 273.15);
 			}
-			printf("\n");
+			fprintf(fp,"\n");
 		}
 	}
-	printf("\n");
+	fprintf(fp,"\n");
 	fprintf(stderr, "Rendu graphique : python3 rendu_picture_steady.py [filename.txt] %d %d %d\n", n, m, o);
-#endif
+	#endif
 	exit(EXIT_SUCCESS);
 }
