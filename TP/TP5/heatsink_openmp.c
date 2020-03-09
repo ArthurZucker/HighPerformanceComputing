@@ -253,14 +253,9 @@ int main()
 		t += dt;
 		n_steps += 1;
 	}
-<<<<<<< HEAD
-	fin = my_gettimeofday();
-#ifdef DUMP_STEADY_STATE
-=======
 	FILE *fp;
 	fp = fopen("./res.txt", "w+");
 	#ifdef DUMP_STEADY_STATE
->>>>>>> 564b2b5a675aa4a94c4d385c6926045e55474e79
 	printf("###### STEADY STATE; t = %.1f\n", t);
 	for (int k = 0; k < o; k++) {	// z
 		fprintf(fp,"# z = %g\n", k * dl);
@@ -273,14 +268,10 @@ int main()
 	}
 	fprintf(fp,"\n");
 	fprintf(stderr, "Rendu graphique : python3 rendu_picture_steady.py [filename.txt] %d %d %d\n", n, m, o);
-<<<<<<< HEAD
 #endif
 
 fprintf(stderr, "Temps total de calcul : %g sec\n", fin - debut);
 fprintf(stdout, "%g\n", fin - debut);
 
-=======
-	#endif
->>>>>>> 564b2b5a675aa4a94c4d385c6926045e55474e79
 	exit(EXIT_SUCCESS);
 }
