@@ -14,7 +14,7 @@ params['proof'] = 0x654ec1942f6b9f51
 
 # Paramètres du calcul (à adapter)
 params['matrix'] = "bcsstk13"
-params['users'] = ["Clément Apavou", "Arthur Zucker"]
+params['users'] = ["Clement Apavou", "Arthur Zucker"]
 
 # Description du code exécuté
 params['software'] = """Code séquentiel fourni.
@@ -31,7 +31,7 @@ params['hardware'] = """iMac pro de Arthur, 8 coeurs 32Go RAM mémoire ECC"""
 #   {cores}  sera remplacé par la valeur ci-dessus.
 #   {seed}   sera remplacé par la valeur fournie par le serveur.
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
-command_line = "./cg --matrix {matrix}.mtx --seed {seed}"
+command_line = "./cg --matrix ./Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
 #command_line = "mpiexec --n {cores} --hostfile nodes.txt --display-map ./cg --matrix {matrix}.mtx --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
