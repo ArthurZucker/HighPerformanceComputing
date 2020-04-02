@@ -14,7 +14,7 @@ params['proof'] = 0x654ec1942f6b9f51
 
 # Paramètres du calcul (à adapter)
 params['matrix'] = "bcsstk13"
-params['users'] = ["Charles Bouillaguet", "Lilia Ziane Khodja"]
+params['users'] = ["Clément Apavou", "Arthur Zucker"]
 
 # Description du code exécuté
 params['software'] = """Code séquentiel fourni.
@@ -23,8 +23,7 @@ Pas d'améliorations apportées."""
 # Description du matériel utilisé pour l'exécution
 params['nodes'] = 4   # nombre de noeuds
 params['cores'] = 8   # nombre total de coeurs
-params['hardware'] = """4 PCs de la Salle 327 (Esclangon).
-Machines de bureau DELL équipés de CPU Intel i3 à 2 coeurs, 3Ghz, et 4Go de RAM."""
+params['hardware'] = """iMac pro de Arthur, 8 coeurs 32Go RAM mémoire ECC"""
 
 # Comment exécuter le solveur :
 #   {matrix} sera remplacé par la valeur ci-dessus.
@@ -42,7 +41,7 @@ command_line = "./cg --matrix {matrix}.mtx --seed {seed}"
 def main():
     # vérifie que le script a bien été modifié !
     assert "Charles Bouillaguet" not in params['users']
-    
+
     print("--> [Connecting]")
     print()
 
@@ -51,8 +50,8 @@ def main():
     print("SERVER says : {}".format(d['msg']))
     print("SERVER gives seed = {}".format(d['seed']))
     print()
-    
-    # Tente d'éxecuter le solveur. 
+
+    # Tente d'éxecuter le solveur.
     cmd = command_line.format(seed=d['seed'], **params)
     print("--> [Starting : {}]".format(cmd))
     try:
@@ -65,19 +64,19 @@ def main():
         print("---------------------------------------------------------------")
         print("Ooops, le solveur a échoué (code de retour != 0).")
         sys.exit(1)
-    
-    # REMARQUE : la mesure de temps effectuée par le serveur inclut a priori le 
-    #            temps nécessaire pour charger la matrice depuis le système de 
+
+    # REMARQUE : la mesure de temps effectuée par le serveur inclut a priori le
+    #            temps nécessaire pour charger la matrice depuis le système de
     #            fichier, ce qui est séquentiel et peut être assez long pour les
-    #            plus grosses. 
-    #            Le comité d'organisation du benchmark (cf. infra) a étudié la 
-    #            possibilité que des étudiants puissent tenter de lancer le 
-    #            solveur et de précharger la matrice en RAM **AVANT** d'avoir 
+    #            plus grosses.
+    #            Le comité d'organisation du benchmark (cf. infra) a étudié la
+    #            possibilité que des étudiants puissent tenter de lancer le
+    #            solveur et de précharger la matrice en RAM **AVANT** d'avoir
     #            reçu le vecteur b, pour avoir un avantage compétitif. Le comité
-    #            a décidé que les étudiants n'étaient certainement pas assez 
+    #            a décidé que les étudiants n'étaient certainement pas assez
     #            bons pour mettre en oeuvre cette stratégie, et d'ailleurs on ne
     #            va pas leur suggérer.
-    
+
     # le solveur a terminé avec succès. On récupère le vecteur solution.
     x = []
     for line in result.stdout.decode().splitlines():
@@ -85,7 +84,7 @@ def main():
     print("Got solution from the solver ({:.1f} Kbyte).".format(0.0078125 * len(x)))
     print()
 
-    # Le chrono tourne toujours. On hashe x le plus vite possible, puis on 
+    # Le chrono tourne toujours. On hashe x le plus vite possible, puis on
     # envoie l'empreinte au serveur pour mettre le vecteur en gage.
     print("--> [Computing commitment]")
     print()
@@ -101,11 +100,11 @@ def main():
     print('SERVER wants me to transmit {} "random" coefficients of x (out of {})'.format(len(e['transmit']), len(x)))
     print("SERVER wants me to decommit x[{}]".format(e['challenge']))
     print()
-    
+
     # OK, maintenant on peut se relaxer et prendre notre temps. Le serveur sait
-    # qu'on a fini. On a intérêt à sauvegarder notre état interne, juste au cas 
+    # qu'on a fini. On a intérêt à sauvegarder notre état interne, juste au cas
     # où un problème ait lieu.
-    
+
     print("--> [Checkpointing]")
     stuff = e['stuff']
     with open("checkpoint.json", "w") as f:
@@ -119,14 +118,14 @@ def main():
     #     chunks = [xbytes[i:i + 304] for i in range(0, len(xbytes), 304)]
     #     commitment, secret = commit(chunks)
 
-    # Maintenant, pour obtenur un reçu, il faut convaincre le serveur qu'on a 
-    # effectué le calcul correctement. On pourrait envoyer tout x, mais c'est 
+    # Maintenant, pour obtenur un reçu, il faut convaincre le serveur qu'on a
+    # effectué le calcul correctement. On pourrait envoyer tout x, mais c'est
     # trop long (il peut faire des dizaines de Mo).
-    # Pour régler ce problème, une réunion au sommet s'est tenue entre les 
-    # responsables de HPC et de ISEC (le fameux "comité d'organisation du 
-    # benchmark"). Il est en sorti un protocole (non-publié) pour démontrer au 
-    # serveur qu'on a VRAIMENT calculé une solution de Ax == b en ne lui 
-    # révélant qu'un tout petit bout de x. Comme le serveur ne vérifie pas 
+    # Pour régler ce problème, une réunion au sommet s'est tenue entre les
+    # responsables de HPC et de ISEC (le fameux "comité d'organisation du
+    # benchmark"). Il est en sorti un protocole (non-publié) pour démontrer au
+    # serveur qu'on a VRAIMENT calculé une solution de Ax == b en ne lui
+    # révélant qu'un tout petit bout de x. Comme le serveur ne vérifie pas
     # tout x, il doit bien y avoir un moyen de tricher... peut-être ?
     coeffs = [x[i] for i in e['transmit']]
     proof = decommit(secret, chunks, e['challenge'] // 38)
@@ -166,7 +165,7 @@ def request(url, method='GET', **kwds):
     return json.loads(response)
 
 def commit(it):
-    """ 
+    """
     Prend en entrée un iterable d'objets de type bytes(), et renvoie une
     paire (mise en gage, secret). Le secret est ensuite utilisé par decommit().
     """
@@ -209,7 +208,7 @@ def decommit(secret, x, i):
             witness_hash, _ = node_tree[1-bit]
             proof.append(witness_hash)
             _, node_tree = node_tree[bit]
-    return (base64.b64encode(x[i]).decode(), 
+    return (base64.b64encode(x[i]).decode(),
         base64.b64encode(b''.join(reversed(proof))).decode())
 
 
