@@ -47,6 +47,9 @@ def main():
 
     # On demande au serveur une graine aléatoire pour générer le membre droit
     d = request(SERVER + "/start", **params)
+    #####################################################
+    ####### DEBUT DU CHRONO##############################
+    #####################################################
     print("SERVER says : {}".format(d['msg']))
     print("SERVER gives seed = {}".format(d['seed']))
     print()
@@ -96,6 +99,9 @@ def main():
     print()
 
     e = request(SERVER + "/stop", stuff=d['stuff'], commitment=commitment)
+    #####################################################
+    ####### FIN DU CHRONO##############################
+    #####################################################
     print("SERVER says : {}".format(e['msg']))
     print('SERVER wants me to transmit {} "random" coefficients of x (out of {})'.format(len(e['transmit']), len(x)))
     print("SERVER wants me to decommit x[{}]".format(e['challenge']))
