@@ -2,7 +2,7 @@
 CC = mpicc
 
 # Add your choice of flags
-CFLAGS = -O3 -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g
 LDLIBS = -lm
 
 all : cg
@@ -10,6 +10,8 @@ all : cg
 cg : cg.o mmio.o
 mmio.o : mmio.c mmio.h
 cg.o : cg.c mmio.h
+
+run :mpirun -n 4 -hostfile hostfile --map-by node ./cg --matrix /Infos/lmd/2019/master/ue/MU4IN903-2020fev/bcsstk13.mtx > /dev/null
 
 .PHONY: clean
 clean :
