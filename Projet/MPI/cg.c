@@ -140,7 +140,6 @@ struct csr_matrix_t *load_mm(FILE * f)
 	/* the following is essentially a bucket sort */
 
 	/* Count the number of entries in each row */
-
 	if (rang == 0) {
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
@@ -150,21 +149,42 @@ struct csr_matrix_t *load_mm(FILE * f)
 				w[j]++;
 		}
 	}
-	MPI_Scatter(w,n/nbp,MPI_DOUBLE,w,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	/*le processus de rang 0 envoie à tout le monde une partie de w */
+	MPI_Scatter(&w[rang*n/nbp],n/nbp,MPI_DOUBLE,&w[rang*n/nbp],n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	/* Compute row pointers (prefix-sum) */
 	int sum = 0;
-	for (int i = rang; i <rang+ n/nbp; i++) {
+	for (int i = rang; i <rang + n/nbp; i++) {
 		Ap[i] = sum;
 		sum += w[i];
 		w[i] = Ap[i];
 	}
+	// /* tout le monde recupere le sum*/
 	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-	MPI_Gather(w,n/nbp,MPI_DOUBLE,w,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	// if(rang == 0){
+	// 	fprintf(stderr, "%d ----------------------------------------------------------------", 0);
+	// 	for(int i=0; i<n;i++)
+	// 		fprintf(stderr, "%d ", w[i]);
+	// }
+	// if(rang == 1){
+	// 	fprintf(stderr, "%d ----------------------------------------------------------------", 1);
+	// 	for(int i=0; i<n;i++)
+	// 		fprintf(stderr, "%d ", w[i]);
+	// }
+
+	/* le processus de rang 0 reçoit la partie de w de chaque processeurs*/
+	MPI_Gather(&w[rang*n/nbp],n/nbp,MPI_DOUBLE,&w[rang*n/nbp],n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	// fprintf(stderr, " %d %d, ", rang,sum);
+	// if(rang == 0){
+	// 	fprintf(stderr, "%d ----------------------------------------------------------------", 0);
+	// 	for(int i=0; i<n;i++)
+	// 		fprintf(stderr, "%d ", w[i]);
+	// }
+
 	if (rang == nbp-1) {
 		Ap[n] = sum;
 	}
-
 	/* Dispatch entries in the right rows */
 	if (rang == 0) {
 		for (int u = 0; u < nnz; u++) {
@@ -180,15 +200,19 @@ struct csr_matrix_t *load_mm(FILE * f)
 				w[j]++;
 			}
 		}
-		for (int i = 0; i < nnz; i++) {
-			MPI_Isend(&Aj[i],Ap[i+1+n/nbp]-Ap[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-			MPI_Isend(&Ax[i],Ap[i+1+n/nbp]-Ap[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-		}
 	}
-	else{
-		MPI_Recv(&Aj[rang],Ap[rang+1+n/nbp]-Ap[rang],MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
-		MPI_Recv(&Ax[rang],Ap[rang+1+n/nbp]-Ap[rang],MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
-	}
+	// MPI_Scatter(Aj,2*nnz,MPI_DOUBLE,Aj,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	// MPI_Scatter(Ax,2*nnz,MPI_DOUBLE,Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	// 	for (int i = 1; i < nbp; i++) {
+	// 		MPI_Isend(&Aj[Ap[i]],Ap[i+1+n/nbp]-Ap[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+	// 		MPI_Isend(&Ax[Ap[i]],Ap[i+1+n/nbp]-Ap[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+	// 	}
+	// }
+	// else{
+	// 	MPI_Recv(&Aj[Ap[rang]],Ap[rang+1+n/nbp]-Ap[rang],MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+	// 	MPI_Recv(&Ax[Ap[rang]],Ap[rang+1+n/nbp]-Ap[rang],MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+	// }
+
 	/* release COOrdinate representation */
 	free(w);
 	if (rang == 0) {
@@ -199,6 +223,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
+
 	A->n = n;
 	A->nz = sum;
 	A->Ap = Ap;
@@ -216,6 +241,7 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
+	fprintf(stderr,"extract_diagonal");
 	for (int i = rang; i < rang + n/nbp; i++) {
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
@@ -232,6 +258,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
+	fprintf(stderr,"sp_gemv");
 	for (int i = rang; i < rang + n/nbp; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
@@ -407,8 +434,8 @@ int main(int argc, char **argv)
 					errx(1, "parse error entry %d\n", i);
 			}
 			fclose(f_b);
-			for (int i = 0; i < nbp; i++) {
-				MPI_Isend(&b[i],rang + n/nbp,MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+			for (int i = 1; i < nbp; i++) {
+				MPI_Isend(&b[i], i + n/nbp,MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 			}
 		}
 		else{
