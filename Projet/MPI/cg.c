@@ -28,7 +28,7 @@
 #include <sys/time.h>
 #include <mpi.h>
 #include "mmio.h"
-
+#include <unistd.h>
 /*Variables pour MPI*/
 //=======================================
 int rang,nbp;
@@ -130,16 +130,32 @@ struct csr_matrix_t *load_mm(FILE * f)
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
 		err(1, "malloc failed");
-	int *w = calloc((n + 1),sizeof(*w)); //Initialise à 0
-	int *Ap = malloc((n + 1) * sizeof(*Ap));
-	int *Aj = malloc(2 * nnz * sizeof(*Ap));
-	double *Ax = malloc(2 * nnz * sizeof(*Ax));
+	int *w = NULL;
+	int *Ap;
+	int *Aj;
+	if (n%nbp != 0) {
+		n = n+1;
+	}
+	double *Ax;
+	if (rang != 0) {
+		Ap = malloc(((n/nbp)+1) * sizeof(*Ap));
+		Aj = malloc(2 * nnz * sizeof(*Ap));
+		Ax = malloc(2 * nnz * sizeof(*Ax));
+	}
+	else{
+		w = calloc((n + 1),sizeof(*w)); //Initialise à 0
+		Ap = malloc((n + 1) * sizeof(*Ap));
+		Aj = malloc(2 * nnz * sizeof(*Ap));		//Peut on diviser par nbp??
+		Ax = malloc(2 * nnz * sizeof(*Ax));	//Peut on diviser par nbp??
+	}
 	if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
 		err(1, "Cannot allocate (CSR) sparse matrix");
 
 	/* the following is essentially a bucket sort */
-
 	/* Count the number of entries in each row */
+	int sum = 0;
+	int m1 = 0;
+	int tab[n/nbp];
 	if (rang == 0) {
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
@@ -148,45 +164,26 @@ struct csr_matrix_t *load_mm(FILE * f)
 			if (i != j)	/* the file contains only the lower triangular part */
 				w[j]++;
 		}
-	}
-	/*le processus de rang 0 envoie à tout le monde une partie de w */
-	MPI_Scatter(&w[rang*n/nbp],n/nbp,MPI_DOUBLE,&w[rang*n/nbp],n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
 	/* Compute row pointers (prefix-sum) */
-	int sum = 0;
-	for (int i = rang; i <rang + n/nbp; i++) {
-		Ap[i] = sum;
-		sum += w[i];
-		w[i] = Ap[i];
-	}
-	// /* tout le monde recupere le sum*/
-	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-	// if(rang == 0){
-	// 	fprintf(stderr, "%d ----------------------------------------------------------------", 0);
-	// 	for(int i=0; i<n;i++)
-	// 		fprintf(stderr, "%d ", w[i]);
-	// }
-	// if(rang == 1){
-	// 	fprintf(stderr, "%d ----------------------------------------------------------------", 1);
-	// 	for(int i=0; i<n;i++)
-	// 		fprintf(stderr, "%d ", w[i]);
-	// }
-
-	/* le processus de rang 0 reçoit la partie de w de chaque processeurs*/
-	MPI_Gather(&w[rang*n/nbp],n/nbp,MPI_DOUBLE,&w[rang*n/nbp],n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
-	// fprintf(stderr, " %d %d, ", rang,sum);
-	// if(rang == 0){
-	// 	fprintf(stderr, "%d ----------------------------------------------------------------", 0);
-	// 	for(int i=0; i<n;i++)
-	// 		fprintf(stderr, "%d ", w[i]);
-	// }
-
-	if (rang == nbp-1) {
+		for (int i = 0; i <n; i++) {
+			Ap[i] = sum;
+			sum += w[i];
+			w[i] = Ap[i];
+			if (i%nbp == 0) {
+				if (m1==0) {
+					tab[m1] = sum;
+				}
+				else{
+					tab[m1] = sum-tab[m1-1];
+					m1++;
+				}
+			}
 		Ap[n] = sum;
+		}
 	}
-	/* Dispatch entries in the right rows */
+	MPI_Scatter(&tab,1,MPI_INT,&sum,1,MPI_INT,0,MPI_COMM_WORLD);
 	if (rang == 0) {
+	/* Dispatch entries in the right rows */
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
 			int j = Tj[u];
@@ -200,22 +197,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 				w[j]++;
 			}
 		}
-	}
-	// MPI_Scatter(Aj,2*nnz,MPI_DOUBLE,Aj,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	// MPI_Scatter(Ax,2*nnz,MPI_DOUBLE,Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	// 	for (int i = 1; i < nbp; i++) {
-	// 		MPI_Isend(&Aj[Ap[i]],Ap[i+1+n/nbp]-Ap[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-	// 		MPI_Isend(&Ax[Ap[i]],Ap[i+1+n/nbp]-Ap[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-	// 	}
-	// }
-	// else{
-	// 	MPI_Recv(&Aj[Ap[rang]],Ap[rang+1+n/nbp]-Ap[rang],MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
-	// 	MPI_Recv(&Ax[Ap[rang]],Ap[rang+1+n/nbp]-Ap[rang],MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
-	// }
-
-	/* release COOrdinate representation */
-	free(w);
-	if (rang == 0) {
+		free(w);
 		free(Ti);
 		free(Tj);
 		free(Tx);
@@ -223,9 +205,19 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
-
-	A->n = n;
+	// OK
+	A->n = (rang!=0)?n/nbp:n;
 	A->nz = sum;
+	MPI_Scatter(Ap,n/nbp,MPI_DOUBLE,Ap,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	if (rang==0) {
+		for (int i = 0; i < n/nbp; i++) {
+			MPI_Isend(&Aj[i], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+		}
+	}
+	else{
+		MPI_Recv(&Aj,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+	}
+
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
