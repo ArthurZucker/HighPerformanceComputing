@@ -84,9 +84,9 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MM_typecode matcode;
 	int n, m, nnz;
 	/* -------- STEP 1 : load the matrix in COOrdinate format */
+	double start = wtime();
 
 	/* read the header, check format */
-	double start = wtime();
 	int *Ti ;
 	int *Tj;
 	double *Tx;
@@ -130,7 +130,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
 		err(1, "malloc failed");
-	int *w = NULL;
+	int *w;
 	int *Ap;
 	int *Aj;
 	if (n%nbp != 0) {
@@ -155,12 +155,12 @@ struct csr_matrix_t *load_mm(FILE * f)
 	/* Count the number of entries in each row */
 	int sum = 0;
 	int m1 = 0;
-	int tab[n/nbp];
+	int tab[nbp];
 	if (rang == 0) {
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
 			int j = Tj[u];
-			w[i]++;
+			w[i]++; // je stocke dans w une info sur chaque nnz
 			if (i != j)	/* the file contains only the lower triangular part */
 				w[j]++;
 		}
@@ -169,26 +169,39 @@ struct csr_matrix_t *load_mm(FILE * f)
 			Ap[i] = sum;
 			sum += w[i];
 			w[i] = Ap[i];
-			if (i%nbp == 0) {
-				if (m1==0) {
+			if (((i+n)%(n/nbp) == 0 || i==n-1) && i !=0)	{
+				if (m1==0){
+					fprintf(stderr, "i : %d \n",i);
 					tab[m1] = sum;
+					m1++;
 				}
 				else{
+					fprintf(stderr, "i : %d \n",i);
 					tab[m1] = sum-tab[m1-1];
 					m1++;
 				}
 			}
-		Ap[n] = sum;
 		}
+		Ap[n] = sum;
+		fprintf(stderr, "m1 : %d \n",m1);
+		fprintf(stderr, "processeur %d : nnz total : %d \n",rang,sum);
+		for(int i=0 ; i<nbp;i++){
+			fprintf(stderr, "tab[%d] : %d  ",i,tab[i]);
+		}
+		fprintf(stderr, "\n");
+		fprintf(stderr, "total : %d \n",tab[0]+tab[1]+tab[2]+tab[3]);//nnz different de la somme des nnz pk?
 	}
+	/* on distribue le bon nnz pour chaque proccesseur */
 	MPI_Scatter(&tab,1,MPI_INT,&sum,1,MPI_INT,0,MPI_COMM_WORLD);
+	fprintf(stderr, "processeur %d : nnz %d \n",rang,sum);
+
 	if (rang == 0) {
 	/* Dispatch entries in the right rows */
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
 			int j = Tj[u];
-			double x = Tx[u];
-			Aj[w[i]] = j;
+			double x = Tx[u]; // les nnz sont dans Ti TJ et Tx
+			Aj[w[i]] = j; // pour chaque éléments non nul , je les ajoutes au bonne endroit dans Aj ou Ax (je crois)
 			Ax[w[i]] = x;
 			w[i]++;
 			if (i != j) {	/* off-diagonal entries are duplicated */
@@ -207,18 +220,22 @@ struct csr_matrix_t *load_mm(FILE * f)
 	}
 	// OK
 	A->n = (rang!=0)?n/nbp:n;
+	fprintf(stderr, "processeur %d : A->n = %d \n", rang,A->n);
 	A->nz = sum;
 	MPI_Scatter(Ap,n/nbp,MPI_DOUBLE,Ap,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	A->Ap = Ap;
+
 	if (rang==0) {
-		for (int i = 0; i < n/nbp; i++) {
+		for (int i = 1; i < nbp; i++) {
 			MPI_Isend(&Aj[i], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ax[i], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 		}
 	}
 	else{
 		MPI_Recv(&Aj,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
-
-	A->Ap = Ap;
+	
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
@@ -234,7 +251,7 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
 	fprintf(stderr,"extract_diagonal");
-	for (int i = rang; i < rang + n/nbp; i++) {
+	for (int i = 0; i < n; i++) {
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
 			if (i == Aj[u])
@@ -251,7 +268,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
 	fprintf(stderr,"sp_gemv");
-	for (int i = rang; i < rang + n/nbp; i++) {
+	for (int i = 0; i < n; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
@@ -308,13 +325,13 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	for (int i = rang; i < rang + n/nbp; i++)
+	for (int i = 0; i < n; i++)
 		x[i] = 0.0;
-	for (int i = rang; i < rang + n/nbp; i++)	// r <-- b - Ax == b
+	for (int i = 0; i < n; i++)	// r <-- b - Ax == b
 		r[i] = b[i];
-	for (int i = rang; i < rang + n/nbp; i++)	// z <-- M^(-1).r
+	for (int i = 0; i < n; i++)	// z <-- M^(-1).r
 		z[i] = r[i] / d[i];
-	for (int i = rang; i < rang + n/nbp; i++)	// p <-- z
+	for (int i = 0; i < n; i++)	// p <-- z
 		p[i] = z[i];
 	double rz = dot(n, r, z);
 	double start = wtime();
@@ -325,15 +342,15 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double old_rz = rz;
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
-		for (int i = rang; i < rang + n/nbp; i++)	// x <-- x + alpha*p
+		for (int i = 0; i < n; i++)	// x <-- x + alpha*p
 			x[i] += alpha * p[i];
-		for (int i = rang; i < rang + n/nbp; i++)	// r <-- r - alpha*q
+		for (int i = 0; i < n; i++)	// r <-- r - alpha*q
 			r[i] -= alpha * q[i];
-		for (int i = rang; i < rang + n/nbp; i++)	// z <-- M^(-1).r
+		for (int i = 0; i < n; i++)	// z <-- M^(-1).r
 			z[i] = r[i] / d[i];
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
-		for (int i = rang; i < rang + n/nbp; i++)	// p <-- z + beta*p
+		for (int i = 0; i < n; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
 		double t = wtime();
