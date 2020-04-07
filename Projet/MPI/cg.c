@@ -34,7 +34,7 @@
 int rang,nbp;
 MPI_Status status;
 MPI_Request request;
-#define DEBUG
+#define NoDEBUG
 //=======================================
 
 
@@ -469,9 +469,6 @@ int main(int argc, char **argv)
 					errx(1, "parse error entry %d\n", i);
 			}
 			fclose(f_b);
-			// for (int i = 1; i < nbp; i++) {
-			// 	MPI_Isend(&b[i], i + n/nbp,MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-			// }
 		}
 		MPI_Scatter(b, n/nbp, MPI_DOUBLE, MPI_IN_PLACE, 0,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	}
@@ -479,7 +476,6 @@ int main(int argc, char **argv)
 		for (int i = 0; i < n; i++)
 			b[i] = PRF(i*rang*n, seed);
 	}
-
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
 	if (safety_check) {
