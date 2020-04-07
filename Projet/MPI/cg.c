@@ -135,7 +135,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 	int *Ap;
 	int *Aj;
 	if (n%nbp != 0) {
-		n = n+1;
+		n = n;
 	}
 	double *Ax;
 	if (rang == 0) {
@@ -242,12 +242,19 @@ struct csr_matrix_t *load_mm(FILE * f)
 		MPI_Recv(Aj,2*sum,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
-	if (rang == 1) {
+	if (rang == 2) {
 		fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
-		for (int i = 0; i < 2*sum; i++) {
-			fprintf(stderr,"%i,",Aj[i]);
+		for (int i = 0; i < n; i++) {
+			for (int u = Ap[i]; u < Ap[i + 1]; u++){
+				fprintf(stderr,"sum = %d,AP[u] = %d\n",2*sum,u);
+				int j = Aj[u];
+				fprintf(stderr,"Aj = %d\t",j);
+				double A_ij = Ax[u];
+				fprintf(stderr,"A_ij = %f\t",Ax[u]);
+			}
 		}
 	}
+	sleep(2);
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
@@ -283,16 +290,9 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	for (int i = 0; i < n; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
-			fprintf(stderr,"\n%d : sp_gemv : for : for :Aj[u] = %d\n",rang,Aj[u]);
 			int j = Aj[u];
-			fprintf(stderr,"\n%d : sp_gemv : for : for :Ax[u] = %f\n",rang,Ax[u]);
 			double A_ij = Ax[u];
-			fprintf(stderr,"\n%d : sp_gemv : for : for :y[i] = %f\n",rang,y[i]);
-			fprintf(stderr,"\n%d : sp_gemv : for : for :x[j] = %f\n",rang,x[j]);
-			fprintf(stderr,"\n%d : sp_gemv : for : for :A_ij * x[j] = %f\n",rang,A_ij *x[j]);
 			y[i] += A_ij * x[j];
-			fprintf(stderr,"\n%d : sp_gemv : for : for :y[i] = %f\n",rang,y[i]);
-			sleep(1);
 		}
 
 	}
@@ -360,7 +360,13 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	while (norm(n, r) > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
+		if (rang==2) {
+			fprintf(stderr, "LA\n" );
+		}
 		sp_gemv(A, p, q);	/* q <-- A.p */
+		if (rang==2) {
+			fprintf(stderr, "Ici\n" );
+		}
 		double alpha = old_rz / dot(n, p, q);
 		for (int i = 0; i < n; i++)	// x <-- x + alpha*p
 			x[i] += alpha * p[i];
