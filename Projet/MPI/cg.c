@@ -34,6 +34,7 @@
 int rang,nbp;
 MPI_Status status;
 MPI_Request request;
+#define DEBUG
 //=======================================
 
 
@@ -261,7 +262,7 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"\nextract_diagonal\n");
+	fprintf(stderr,"\n%d : extract_diagonal\n",rang);
 	for (int i = 0; i < n; i++) {
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
@@ -278,13 +279,20 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"sp_gemv\n");
+	fprintf(stderr,"\n%d : sp_gemv\n",rang);
 	for (int i = 0; i < n; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
+			fprintf(stderr,"\n%d : sp_gemv : for : for :Aj[u] = %d\n",rang,Aj[u]);
 			int j = Aj[u];
+			fprintf(stderr,"\n%d : sp_gemv : for : for :Ax[u] = %f\n",rang,Ax[u]);
 			double A_ij = Ax[u];
+			fprintf(stderr,"\n%d : sp_gemv : for : for :y[i] = %f\n",rang,y[i]);
+			fprintf(stderr,"\n%d : sp_gemv : for : for :x[j] = %f\n",rang,x[j]);
+			fprintf(stderr,"\n%d : sp_gemv : for : for :A_ij * x[j] = %f\n",rang,A_ij *x[j]);
 			y[i] += A_ij * x[j];
+			fprintf(stderr,"\n%d : sp_gemv : for : for :y[i] = %f\n",rang,y[i]);
+			sleep(1);
 		}
 
 	}
@@ -396,6 +404,19 @@ int main(int argc, char **argv)
 	MPI_Init(&argc,&argv);
 	MPI_Comm_size (MPI_COMM_WORLD, &nbp);
 	MPI_Comm_rank (MPI_COMM_WORLD,&rang);
+
+	#ifdef DEBUG
+	{
+    volatile int i = 0;
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    printf("PID %d on %s ready for attach\n", getpid(), hostname);
+    fflush(stdout);
+    while (0 == i)
+        sleep(5);
+	}
+	#endif
+
 	long long seed = 0;
 	char *rhs_filename = NULL;
 	char *matrix_filename = NULL;
