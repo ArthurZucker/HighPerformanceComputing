@@ -144,9 +144,9 @@ struct csr_matrix_t *load_mm(FILE * f)
 		Ax = malloc(2 * nnz * sizeof(*Ax));	//Peut on diviser par nbp??
 
 	}
-
-	if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
-		err(1, "Cannot allocate (CSR) sparse matrix");
+	if(rang==0)
+		if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
+			err(1, "Cannot allocate (CSR) sparse matrix");
 
 	/* the following is essentially a bucket sort */
 	/* Count the number of entries in each row */
@@ -220,7 +220,8 @@ struct csr_matrix_t *load_mm(FILE * f)
 		stop = wtime();
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
-	}else{
+	}
+	else	{
 		Ap = malloc(((n/nbp)+1) * sizeof(*Ap)); //n+1 le plus 1 vient de la diagonale
 		Aj = malloc(2 * sum * sizeof(*Ap));
 		Ax = malloc(2 * sum * sizeof(*Ax));
@@ -240,12 +241,12 @@ struct csr_matrix_t *load_mm(FILE * f)
 		MPI_Recv(Aj,2*sum,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
-	// if (rang == 3) {
-	// 	fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
-	// 	for (int i = 0; i < 2*sum; i++) {
-	// 		fprintf(stderr,"%i,",Aj[i]);
-	// 	}
-	// }
+	if (rang == 1) {
+		fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
+		for (int i = 0; i < 2*sum; i++) {
+			fprintf(stderr,"%i,",Aj[i]);
+		}
+	}
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
