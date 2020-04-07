@@ -240,12 +240,6 @@ struct csr_matrix_t *load_mm(FILE * f)
 		MPI_Recv(Aj,2*sum,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
-	// if (rang == 3) {
-	// 	fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
-	// 	for (int i = 0; i < 2*sum; i++) {
-	// 		fprintf(stderr,"%i,",Aj[i]);
-	// 	}
-	// }
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
@@ -260,7 +254,7 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"\nextract_diagonal\n");
+	fprintf(stderr,"\n%d : extract_diagonal\n",rang);
 	for (int i = 0; i < n; i++) {
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
@@ -277,13 +271,20 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"sp_gemv\n");
+	fprintf(stderr,"\n%d : sp_gemv\n",rang);
 	for (int i = 0; i < n; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
+			fprintf(stderr,"\n%d : sp_gemv : for : for :Aj[u] = %d\n",rang,Aj[u]);
 			int j = Aj[u];
+			fprintf(stderr,"\n%d : sp_gemv : for : for :Ax[u] = %f\n",rang,Ax[u]);
 			double A_ij = Ax[u];
+			fprintf(stderr,"\n%d : sp_gemv : for : for :y[i] = %f\n",rang,y[i]);
+			fprintf(stderr,"\n%d : sp_gemv : for : for :x[j] = %f\n",rang,x[j]);
+			fprintf(stderr,"\n%d : sp_gemv : for : for :A_ij *x[j] = %f\n",rang,A_ij *x[j]);
 			y[i] += A_ij * x[j];
+			fprintf(stderr,"\n%d : sp_gemv : for : for :y[i] = %f\n",rang,y[i]);
+			sleep(1);
 		}
 
 	}
