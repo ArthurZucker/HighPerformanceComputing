@@ -141,24 +141,19 @@ struct csr_matrix_t *load_mm(FILE * f)
 	}
 	fprintf(stderr, "\nn = %d\n",n );
 	double *Ax;
-	if (rang == 0) {
-		w = calloc((n + 1),sizeof(*w)); 			//Initialise à 0
-		Ap = malloc((n + 1) * sizeof(*Ap));
-		Aj = malloc(2 * nnz * sizeof(*Ap));		//Peut on diviser par nbp??
-		Ax = malloc(2 * nnz * sizeof(*Ax));		//Peut on diviser par nbp??
-
-	}
-	if(rang==0)
-		if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
-			err(1, "Cannot allocate (CSR) sparse matrix");
-
-	/* the following is essentially a bucket sort */
-	/* Count the number of entries in each row */
 	int sum = 0;
 	int sum2 = 0;
 	int m1 = 0;
 	int tab[nbp];
 	if (rang == 0) {
+		w = calloc((n + 1),sizeof(*w)); 			//Initialise à 0
+		Ap = malloc((n + 1) * sizeof(*Ap));
+		Aj = malloc(2 * nnz * sizeof(*Ap));		//Peut on diviser par nbp??
+		Ax = malloc(2 * nnz * sizeof(*Ax));		//Peut on diviser par nbp??
+		if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
+			err(1, "Cannot allocate (CSR) sparse matrix");
+		/* the following is essentially a bucket sort */
+		/* Count the number of entries in each row */
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
 			int j = Tj[u];
@@ -243,18 +238,18 @@ struct csr_matrix_t *load_mm(FILE * f)
 		MPI_Recv(Aj,2*sum,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
-	// if (rang == 1) {
-	// 	fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
-	// 	for (int i = 0; i < n; i++) {
-	// 		for (int u = Ap[i]; u < Ap[i + 1]; u++){
-	// 			fprintf(stderr,"sum = %d,[u] = %d\n",2*sum,u);
-	// 			int j = Aj[u];
-	// 			fprintf(stderr,"Aj = %d\t",j);
-	// 			double A_ij = Ax[u];
-	// 			fprintf(stderr,"A_ij = %f\t",Ax[u]);
-	// 		}
-	// 	}
-	// }
+	if (rang == 1) {
+		fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
+		for (int i = 0; i < n; i++) {
+			for (int u = Ap[i]; u < Ap[i + 1]; u++){
+				fprintf(stderr,"\nAp[i+1] = %d\tsum = %d,[u] = %d\t",Ap[i+1],2*sum,u);
+				int j = Aj[u];
+				fprintf(stderr,"Aj = %d\t",j);
+				double A_ij = Ax[u];
+			}
+		}
+	}
+	sleep(4);
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
@@ -292,7 +287,9 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
+			// Issue with Aj's valu left un initialized
 			if(j>u && u > 55000){
+				j = 0;
 				fprintf(stderr, "%d : \\%d|%d/ fails, A[u+1] == %d\n",rang,j,u+n,Ap[i+1] );
 			}
 
@@ -307,7 +304,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 /* dot product */
 double dot(const int n, const double *x, const double *y)
 {
-	MPI_Barrier(MPI_COMM_WORLD);
+	//MPI_Barrier(MPI_COMM_WORLD);
 	double sum = 0.0;
 	for (int i = 0; i < n; i++)
 		sum += x[i] * y[i];
@@ -365,13 +362,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	while (norm(n, r) > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
-		if (rang==2) {
-			fprintf(stderr, "LA\n" );
-		}
 		sp_gemv(A, p, q);	/* q <-- A.p */
-		if (rang==2) {
-			fprintf(stderr, "Ici\n" );
-		}
 		double alpha = old_rz / dot(n, p, q);
 		for (int i = 0; i < n; i++)	// x <-- x + alpha*p
 			x[i] += alpha * p[i];
@@ -415,18 +406,6 @@ int main(int argc, char **argv)
 	MPI_Init(&argc,&argv);
 	MPI_Comm_size (MPI_COMM_WORLD, &nbp);
 	MPI_Comm_rank (MPI_COMM_WORLD,&rang);
-
-	#ifdef DEBUG
-	{
-    volatile int i = 0;
-    char hostname[256];
-    gethostname(hostname, sizeof(hostname));
-    printf("PID %d on %s ready for attach\n", getpid(), hostname);
-    fflush(stdout);
-    while (0 == i)
-        sleep(5);
-	}
-	#endif
 
 	long long seed = 0;
 	char *rhs_filename = NULL;
@@ -488,7 +467,7 @@ int main(int argc, char **argv)
 			}
 			fclose(f_b);
 		}
-		MPI_Scatter(b, n/nbp, MPI_DOUBLE, MPI_IN_PLACE, 0,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		MPI_Scatter(b, n, MPI_DOUBLE, MPI_IN_PLACE, 0,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	}
 	else {
 		for (int i = 0; i < n; i++)
@@ -496,17 +475,22 @@ int main(int argc, char **argv)
 	}
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
+
 	if (safety_check) {
 		double *y = scratch;
 		sp_gemv(A, x, y);	// y = Ax
 		for (int i = 0; i < n; i++)	// y = Ax - b
 			y[i] -= b[i];
+		double norme = norm(n, y);
 		if (rang == 0) {
-			fprintf(stderr, "[check] max error = %2.2e\n", norm(n, y));
+			fprintf(stderr, "[check] max error = %2.2e\n", norme);
 		}
 	}
-	//MPI_Gather(x,n/nbp,MPI_DOUBLE,x,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	// TO DO : parralléliser la lecture de fichier
+	double *X = NULL;
 	if (rang == 0) {
+		X = malloc(N*sizeof(double));
+		MPI_Gather(X,n/nbp,MPI_DOUBLE,x,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
 		/* Dump the solution vector */
 			FILE *f_x = stdout;
 			if (solution_filename != NULL) {
@@ -515,8 +499,11 @@ int main(int argc, char **argv)
 					err(1, "cannot open solution file %s", solution_filename);
 				fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 			}
-			for (int i = 0; i < n; i++)
-				fprintf(f_x, "%a\n", x[i]);
+			for (int i = 0; i < N; i++)
+				fprintf(f_x, "%a\n", X[i]);
+	}
+	else{
+		MPI_Gather(x,n/nbp,MPI_DOUBLE,X,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	}
 	MPI_Finalize();
 	return EXIT_SUCCESS;
