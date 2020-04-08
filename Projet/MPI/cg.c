@@ -167,9 +167,8 @@ struct csr_matrix_t *load_mm(FILE * f)
 				w[j]++;
 		}
 	/* Compute row pointers (prefix-sum) */
-		for (int i = 0; i <n ; i++) { //n - n/nbp - n%nbp
+		for (int i = 0; i <n ; i++) {
 			Ap[i] = sum;
-			fprintf(stderr, "%d : Ap[i] = %d\n",rang,Ap[i] );
 			sum += w[i];
 			w[i] = Ap[i];
 			if ((i%(n/nbp) == 0 || i==n-1) && i !=0)	{
@@ -185,14 +184,13 @@ struct csr_matrix_t *load_mm(FILE * f)
 					m1++;
 				}
 			}
+
 		}
 		Ap[n] = sum;
-
-
 	}
 	/* on distribue le bon nnz pour chaque proccesseur */
 	MPI_Scatter(&tab,1,MPI_INT,&sum,1,MPI_INT,0,MPI_COMM_WORLD);
-	//fprintf(stderr, "processeur %d : nnz %d \n",rang,sum);
+	fprintf(stderr, "processeur %d : nnz %d \n",rang,sum);
 	// Above is OK!!
 	if (rang == 0) {
 	/* Dispatch entries in the right rows */
@@ -228,11 +226,11 @@ struct csr_matrix_t *load_mm(FILE * f)
 	A->nz = sum;
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
-			MPI_Isend(&Ap[i*n/nbp], n/nbp+1,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ap[i*n/nbp], (n/nbp)+1,MPI_INT,i,0,MPI_COMM_WORLD,&request);
 		}
 	}
 	else{
-		MPI_Recv(Ap,n/nbp+1,MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(Ap,(n/nbp)+1,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 	}
 	A->Ap = Ap;
 	if (rang==0) {
@@ -294,6 +292,10 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
+			if(j>u && u > 55000){
+				fprintf(stderr, "%d : \\%d|%d/ fails, A[u+1] == %d\n",rang,j,u+n,Ap[i+1] );
+			}
+
 			y[i] += A_ij * x[j];
 		}
 
