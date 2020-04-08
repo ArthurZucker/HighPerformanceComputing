@@ -136,6 +136,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 	int *Ap;
 	int *Aj;
 	N = n;
+	// Fixing the total size to be divided
 	while (n%nbp != 0) {
 		n++;
 	}
@@ -221,7 +222,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 	A->nz = sum;
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
-			MPI_Isend(&Ap[i*n/nbp], (n/nbp)+1,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Send(&Ap[i*n/nbp], (n/nbp)+1,MPI_INT,i,0,MPI_COMM_WORLD);
 		}
 	}
 	else{
@@ -230,26 +231,30 @@ struct csr_matrix_t *load_mm(FILE * f)
 	A->Ap = Ap;
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
-			MPI_Isend(&Aj[i], 2*tab[i],MPI_INT,i,0,MPI_COMM_WORLD,&request);
-			MPI_Isend(&Ax[i], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+			int u = Ap[i*n/nbp];
+			for (int k = u; k < 2*tab[i]+1; k++) {
+				fprintf(stderr, "k = %d\n",k);
+				fprintf(stderr, "%d: Ax[k] = %f\n",rang, Ax[k]);
+			}
+			MPI_Send(&Aj[u], 2*tab[i],MPI_INT,i,0,MPI_COMM_WORLD);
+			MPI_Send(&Ax[u], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD);
 		}
 	}
 	else{
 		MPI_Recv(Aj,2*sum,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
-	if (rang == 1) {
-		fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
-		for (int i = 0; i < n; i++) {
-			for (int u = Ap[i]; u < Ap[i + 1]; u++){
-				fprintf(stderr,"\nAp[i+1] = %d\tsum = %d,[u] = %d\t",Ap[i+1],2*sum,u);
-				int j = Aj[u];
-				fprintf(stderr,"Aj = %d\t",j);
-				double A_ij = Ax[u];
-			}
-		}
-	}
-	sleep(4);
+	// if (rang == 1) {
+	// 	fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
+	// 	for (int i = 0; i < n; i++) {
+	// 		for (int u = Ap[i]; u < Ap[i + 1]; u++){
+	// 			fprintf(stderr,"\nAp[i+1] = %d\tsum = %d,[u] = %d\t",Ap[i+1],2*sum,u);
+	// 			int j = Aj[u];
+	// 			fprintf(stderr,"Aj = %d\t",j);
+	// 			double A_ij = Ax[u];
+	// 		}
+	// 	}
+	// }
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
@@ -264,12 +269,18 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"\n%d : extract_diagonal\n",rang);
+	//fprintf(stderr,"\n%d : extract_diagonal\n",rang);
 	for (int i = 0; i < n; i++) {
 		d[i] = 0.0;
-		for (int u = Ap[i]; u < Ap[i + 1]; u++)
-			if (i == Aj[u])
+		for (int u = Ap[i]; u < Ap[i + 1]; u++){
+			//fprintf(stderr,"\n%d \n",i);
+			//fprintf(stderr,"\n Aj[u]=%d \n",Aj[u]);
+			if (i == Aj[u]){
 				d[i] += Ax[u];
+				//if(rang==0)
+				fprintf(stderr,"\n%d : extract_diagonal rang %d i=%d u=%d\n",rang,i,u);
+			}
+		}
 	}
 }
 
@@ -287,7 +298,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
-			// Issue with Aj's valu left un initialized
+			// Issue with Aj's value left un initialized
 			if(j>u && u > 55000){
 				j = 0;
 				fprintf(stderr, "%d : \\%d|%d/ fails, A[u+1] == %d\n",rang,j,u+n,Ap[i+1] );
@@ -304,11 +315,11 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 /* dot product */
 double dot(const int n, const double *x, const double *y)
 {
-	//MPI_Barrier(MPI_COMM_WORLD);
 	double sum = 0.0;
 	for (int i = 0; i < n; i++)
 		sum += x[i] * y[i];
 	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+	fprintf(stderr, "%d : summmmmm = %f\n",rang,sum );
 	return sum;
 }
 
@@ -355,11 +366,23 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		z[i] = r[i] / d[i];
 	for (int i = 0; i < n; i++)	// p <-- z
 		p[i] = z[i];
+	if (rang==0) {
+		sleep(3);
+	}else{
+		fprintf(stderr, "0 should be sleeping");
+		for (int i = 0; i < n; i++) {
+			//fprintf(stderr, "%d : z[i] = %f\n", rang,z[i]);
+		}
+	}
+
 	double rz = dot(n, r, z);
+	fprintf(stderr, "First dot of cg_solve done\n" );
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
+
 	while (norm(n, r) > epsilon) {
+
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		sp_gemv(A, p, q);	/* q <-- A.p */
@@ -384,6 +407,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			fflush(stdout);
 			last_display = t;
 		}
+		fprintf(stderr, "norme > eps?%d\n",norm(n, r) > epsilon );
 	}
 	fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 }
@@ -471,7 +495,7 @@ int main(int argc, char **argv)
 	}
 	else {
 		for (int i = 0; i < n; i++)
-			b[i] = PRF(i*rang*n, seed);
+			b[i] = PRF(i*(rang+1)*n, seed);
 	}
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
