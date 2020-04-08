@@ -192,7 +192,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	stop = wtime();
-	fprintf(stderr, "     ---> Envoie de sum, Ap, Aj et Ax %.1fs\n", stop - start);
+	fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
 	A->nz = sum;
@@ -274,10 +274,6 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
-	if (rang==1)
-		for (int i = 0; i < n; i++)
-			fprintf(stderr, "d[%d] = %f\n", i, d[i]);
-
 	/*
 	 * This function follows closely the pseudo-code given in the (english)
 	 * Wikipedia page "Conjugate gradient method". This is the version with
@@ -285,14 +281,18 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){
 		x[i] = 0.0;
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- b - Ax == b
 		r[i] = b[i];
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
 		z[i] = r[i] / d[i];
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z
 		p[i] = z[i];
+	}
+	// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- b - Ax == b
+	//
+	// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
+	//
+	// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z
+
 
 	double rz = dot(n, r, z);
 	double start = wtime();
@@ -301,31 +301,36 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	while (norm(n, r) > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
-		//fprintf(stderr, "\n     old_rz = %a \n", old_rz);
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)// x <-- x + alpha*p
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- r - alpha*q
 			r[i] -= alpha * q[i];
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
 			z[i] = r[i] / d[i];
+		}
+		// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- r - alpha*q
+		//
+		// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
+		//
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
+		double norme = norm(n, r);
 		double t = wtime();
 		if (t - last_display > 0.5) {
 			/* verbosity */
 			double rate = iter / (t - start);	// iterations per s.
 			double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
-			fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norm(n, r), iter, rate, GFLOPs);
+			fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
 			fflush(stdout);
 			last_display = t;
 		}
 	}
-	fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
+	if (rang==0) {
+		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
+	}
 }
 
 /******************************* main program *********************************/
@@ -412,21 +417,7 @@ int main(int argc, char **argv)
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
 
-	if (rang != 0) {
-			MPI_Ssend(&x[rang*(n/nbp)],n/nbp, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
-	}
-	else{
-		// Root doit écrire le tableau final, on recoit les blocs dans un ordre aléatoire
-		for (int i = 0; i < nbp-1; i++) {
-			double *temp = malloc(n/nbp*sizeof(double));
-			MPI_Recv(temp,n/nbp,MPI_DOUBLE,MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
-			int giver = status.MPI_SOURCE;
-			for (int ii = 0; ii < n/nbp; ii++) {
-				x[giver*(n/nbp)+ii] = temp[ii];
-			}
-			free(temp);
-		}
-	}
+
 	/* Check result */
 	if (safety_check) {
 		double *y = scratch;
@@ -438,8 +429,19 @@ int main(int argc, char **argv)
 			fprintf(stderr, "[check] max error = %2.2e\n", norme);
 		}
 	}
+	// Sharing the resut
+	double *x1;
+	if (rang == 0) {
+		x1 = malloc(n*sizeof(double));
+	}
+	else{
+		x1 = x;
+	}
+	MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	/* Dump the solution vector */
 	if (rang==0) {
-		/* Dump the solution vector */
+		x = x1;
 		FILE *f_x = stdout;
 		if (solution_filename != NULL) {
 			f_x = fopen(solution_filename, "w");
