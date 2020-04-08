@@ -236,21 +236,6 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	}
 }
 
-void sp_gemv2(const struct csr_matrix_t *A, const double *x, double *y)
-{
-	int n = A->n;
-	int *Ap = A->Ap;
-	int *Aj = A->Aj;
-	double *Ax = A->Ax;
-	for (int i = 0; i < n; i++) {
-		y[i] = 0;
-		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
-			int j = Aj[u];
-			double A_ij = Ax[u];
-			y[i] += A_ij * x[j];
-		}
-	}
-}
 /*************************** Vector operations ********************************/
 
 /* dot product */
@@ -263,17 +248,6 @@ double dot(const int n, const double *x, const double *y)
 	return sum;
 }
 
-double dot2(const int n, const double *x, const double *y)
-{
-	double sum = 0.0;
-	for (int i = 0; i < n; i++)
-		sum += x[i] * y[i];
-	return sum;
-}
-double norm2(const int n, const double *x)
-{
-	return sqrt(dot2(n, x, x));
-}
 /* euclidean norm (a.k.a 2-norm) */
 double norm(const int n, const double *x)
 {
@@ -302,7 +276,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	extract_diagonal(A, d);
 	if (rang==1)
 		for (int i = 0; i < n; i++)
-			fprintf(stderr, "d[%d] = %f\n", i, d[i]);
+			//fprintf(stderr, "d[%d] = %f\n", i, d[i]);
 
 	/*
 	 * This function follows closely the pseudo-code given in the (english)
@@ -327,7 +301,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	while (norm(n, r) > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
-		fprintf(stderr, "\n     old_rz = %a \n", old_rz);
+		//fprintf(stderr, "\n     old_rz = %a \n", old_rz);
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)// x <-- x + alpha*p
