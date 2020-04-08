@@ -453,16 +453,16 @@ int main(int argc, char **argv)
 	// 	for (int i = 0; i < n; i++)
 	// 		fprintf(stderr, "%a\n", x[i]);
 	/* Check result */
-		if (safety_check) {
-			double *y = scratch;
-			sp_gemv(A, x, y);	// y = Ax
-			for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// y = Ax - b
-				y[i] -= b[i];
-			double norme = norm(n, y);
-			if (rang == 0) {
-				fprintf(stderr, "[check] max error = %2.2e\n", norme);
-			}
+	if (safety_check) {
+		double *y = scratch;
+		sp_gemv(A, x, y);	// y = Ax
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// y = Ax - b
+			y[i] -= b[i];
+		double norme = norm(n, y);
+		if (rang == 0) {
+			fprintf(stderr, "[check] max error = %2.2e\n", norme);
 		}
+	}
 	if (rang==0) {
 		/* Dump the solution vector */
 		FILE *f_x = stdout;

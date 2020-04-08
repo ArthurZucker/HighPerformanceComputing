@@ -36,7 +36,7 @@ params['hardware'] = """ Arthur pc"""
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
 #command_line = "./cg_same_A --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
-command_line = "mpiexec --n {cores} --hostfile nodes.txt --display-map ./cg_same_A --matrix ../Matrix/{matrix}.mtx --seed {seed}"
+command_line = "mpiexec --n {cores} --hostfile nodes.txt --display-map ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
 
 ######################### Main Program ###########################
