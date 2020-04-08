@@ -28,6 +28,7 @@
 #include <sys/time.h>
 #include <unistd.h> //For sleep(x)
 #include "mmio.h"
+#include <mpi.h>
 /*Variables pour MPI*/
 //=======================================
 int rang,nbp;
