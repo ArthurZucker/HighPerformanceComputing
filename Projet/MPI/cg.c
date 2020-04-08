@@ -28,16 +28,10 @@
 #include <sys/time.h>
 #include <mpi.h>
 #include "mmio.h"
-#include <unistd.h>
-/*Variables pour MPI*/
-//=======================================
+
 int rang,nbp;
 MPI_Status status;
 MPI_Request request;
-int N;
-#define NoDEBUG
-//=======================================
-
 
 #define THRESHOLD 1e-8		// maximum tolerance threshold
 
@@ -82,9 +76,9 @@ double PRF(int i, unsigned long long seed)
 /* Load MatrixMarket sparse symetric matrix from the file descriptor f */
 struct csr_matrix_t *load_mm(FILE * f)
 {
-	// On parallélise pour que chacun n'ai que sa partie de A
 	MM_typecode matcode;
 	int n, m, nnz;
+
 	/* -------- STEP 1 : load the matrix in COOrdinate format */
 	double start = wtime();
 
@@ -93,15 +87,16 @@ struct csr_matrix_t *load_mm(FILE * f)
 	int *Tj;
 	double *Tx;
 	double stop;
-	if (mm_read_banner(f, &matcode) != 0)
-		errx(1, "Could not process Matrix Market banner.\n");
-	if (!mm_is_matrix(matcode) || !mm_is_sparse(matcode))
-		errx(1, "Matrix Market type: [%s] not supported (only sparse matrices are OK)", mm_typecode_to_str(matcode));
-	if (!mm_is_symmetric(matcode) || !mm_is_real(matcode))
-		errx(1, "Matrix type [%s] not supported (only real symmetric are OK)", mm_typecode_to_str(matcode));
-	if (mm_read_mtx_crd_size(f, &n, &m, &nnz) != 0)
-		errx(1, "Cannot read matrix size");
 	if (rang == 0) {
+		if (mm_read_banner(f, &matcode) != 0)
+			errx(1, "Could not process Matrix Market banner.\n");
+		if (!mm_is_matrix(matcode) || !mm_is_sparse(matcode))
+			errx(1, "Matrix Market type: [%s] not supported (only sparse matrices are OK)", mm_typecode_to_str(matcode));
+		if (!mm_is_symmetric(matcode) || !mm_is_real(matcode))
+			errx(1, "Matrix type [%s] not supported (only real symmetric are OK)", mm_typecode_to_str(matcode));
+		if (mm_read_mtx_crd_size(f, &n, &m, &nnz) != 0)
+			errx(1, "Cannot read matrix size");
+
 		fprintf(stderr, "[IO] Loading [%s] %d x %d with %d nz in triplet format\n", mm_typecode_to_str(matcode), n, n, nnz);
 		fprintf(stderr, "     ---> for this, I will allocate %.1f MByte\n", 1e-6 * (40.0 * nnz + 8.0 * n));
 		/* Allocate memory for the COOrdinate representation of the matrix (lower-triangle only) */
@@ -126,76 +121,52 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> loaded in %.1fs\n", stop - start);
 		start = wtime();
 	}
-
 	/* -------- STEP 2: Convert to CSR (compressed sparse row) representation ----- */
+	double start2 = wtime();
+	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
+	double stop2 = wtime();
+	fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
 		err(1, "malloc failed");
-	int *w;
-	int *Ap;
-	int *Aj;
-	N = n;
-	// Fixing the total size to be divided
-	while (n%nbp != 0) {
-		n++;
-	}
-	fprintf(stderr, "\nn = %d\n",n );
-	double *Ax;
-	int sum = 0;
-	int sum2 = 0;
-	int m1 = 0;
-	int tab[nbp];
-	if (rang == 0) {
-		w = calloc((n + 1),sizeof(*w)); 			//Initialise à 0
-		Ap = malloc((n + 1) * sizeof(*Ap));
-		Aj = malloc(2 * nnz * sizeof(*Ap));		//Peut on diviser par nbp??
-		Ax = malloc(2 * nnz * sizeof(*Ax));		//Peut on diviser par nbp??
-		if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
-			err(1, "Cannot allocate (CSR) sparse matrix");
-		/* the following is essentially a bucket sort */
+	int *w = malloc((n + 1) * sizeof(*w));
+	int *Ap = malloc((n + 1) * sizeof(*Ap));
+	int *Aj = malloc(2 * nnz * sizeof(*Ap));
+	double *Ax = malloc(2 * nnz * sizeof(*Ax));
+	if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
+		err(1, "Cannot allocate (CSR) sparse matrix");
+
+	int sum;
+	/* the following is essentially a bucket sort */
+	if(rang==0){
 		/* Count the number of entries in each row */
+		for (int i = 0; i < n; i++)
+			w[i] = 0;
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
 			int j = Tj[u];
-			w[i]++; 		// je stocke dans w une info sur chaque nnz
+			w[i]++;
 			if (i != j)	/* the file contains only the lower triangular part */
 				w[j]++;
 		}
-	/* Compute row pointers (prefix-sum) */
-		for (int i = 0; i <n ; i++) {
+
+		/* Compute row pointers (prefix-sum) */
+		sum = 0;
+		for (int i = 0; i < n; i++) {
 			Ap[i] = sum;
 			sum += w[i];
 			w[i] = Ap[i];
-			if ((i%(n/nbp) == 0 || i==n-1) && i !=0)	{
-				if (m1==0){
-					tab[m1] = sum;
-					sum2 = sum;
-					m1++;
-
-				}
-				else{
-					tab[m1] = sum-sum2;
-					sum2 = sum;
-					m1++;
-				}
-			}
-
 		}
 		Ap[n] = sum;
-	}
-	/* on distribue le bon nnz pour chaque proccesseur */
-	MPI_Scatter(&tab,1,MPI_INT,&sum,1,MPI_INT,0,MPI_COMM_WORLD);
-	fprintf(stderr, "processeur %d : nnz %d \n",rang,sum);
-	// Above is OK!!
-	if (rang == 0) {
-	/* Dispatch entries in the right rows */
-	//fprintf(stderr, "processeur %d : nnz %d \n",rang,sum);
+
+		/* Dispatch entries in the right rows */
 		for (int u = 0; u < nnz; u++) {
 			int i = Ti[u];
 			int j = Tj[u];
-			double x = Tx[u]; // les nnz sont dans Ti TJ et Tx
-			Aj[w[i]] = j; // pour chaque éléments non nul , je les ajoutes au bonne endroit dans Aj ou Ax (je crois)
+			double x = Tx[u];
+			Aj[w[i]] = j;
 			Ax[w[i]] = x;
 			w[i]++;
 			if (i != j) {	/* off-diagonal entries are duplicated */
@@ -204,6 +175,8 @@ struct csr_matrix_t *load_mm(FILE * f)
 				w[j]++;
 			}
 		}
+
+		/* release COOrdinate representation */
 		free(w);
 		free(Ti);
 		free(Tj);
@@ -212,49 +185,18 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
-	else	{
-		Ap = malloc(((n/nbp)+1) * sizeof(*Ap)); //n+1 le plus 1 vient de la diagonale
-		Aj = malloc(2 * sum * sizeof(*Ap));
-		Ax = malloc(2 * sum * sizeof(*Ax));
-	}
-	// OK
-	A->n = n/nbp;
+
+	start = wtime();
+	MPI_Bcast(&sum,1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(Ap,n + 1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	stop = wtime();
+	fprintf(stderr, "     ---> Envoie de sum, Ap, Aj et Ax %.1fs\n", stop - start);
+
+	A->n = n;
 	A->nz = sum;
-	if (rang==0) {
-		for (int i = 1; i < nbp; i++) {
-			MPI_Send(&Ap[i*n/nbp], (n/nbp)+1,MPI_INT,i,0,MPI_COMM_WORLD);
-		}
-	}
-	else{
-		MPI_Recv(Ap,(n/nbp)+1,MPI_INT,0,0,MPI_COMM_WORLD,&status);
-	}
 	A->Ap = Ap;
-	if (rang==0) {
-		for (int i = 1; i < nbp; i++) {
-			int u = Ap[i*n/nbp];
-			for (int k = u; k < 2*tab[i]+1; k++) {
-				fprintf(stderr, "k = %d\n",k);
-				fprintf(stderr, "%d: Ax[k] = %f\n",rang, Ax[k]);
-			}
-			MPI_Send(&Aj[u], 2*tab[i],MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Ax[u], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD);
-		}
-	}
-	else{
-		MPI_Recv(Aj,2*sum,MPI_INT,0,0,MPI_COMM_WORLD,&status);
-		MPI_Recv(Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
-	}
-	// if (rang == 1) {
-	// 	fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
-	// 	for (int i = 0; i < n; i++) {
-	// 		for (int u = Ap[i]; u < Ap[i + 1]; u++){
-	// 			fprintf(stderr,"\nAp[i+1] = %d\tsum = %d,[u] = %d\t",Ap[i+1],2*sum,u);
-	// 			int j = Aj[u];
-	// 			fprintf(stderr,"Aj = %d\t",j);
-	// 			double A_ij = Ax[u];
-	// 		}
-	// 	}
-	// }
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
@@ -269,60 +211,69 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	//fprintf(stderr,"\n%d : extract_diagonal\n",rang);
-	for (int i = 0; i < n; i++) {
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 		d[i] = 0.0;
-		for (int u = Ap[i]; u < Ap[i + 1]; u++){
-			//fprintf(stderr,"\n%d \n",i);
-			//fprintf(stderr,"\n Aj[u]=%d \n",Aj[u]);
-			if (i == Aj[u]){
+		for (int u = Ap[i]; u < Ap[i + 1]; u++)
+			if (i == Aj[u])
 				d[i] += Ax[u];
-				//if(rang==0)
-				fprintf(stderr,"\n%d : extract_diagonal rang %d i=%d u=%d\n",rang,i,u);
-			}
-		}
 	}
 }
 
 /* Matrix-vector product (with A in CSR format) : y = Ax */
 void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 {
-	//=======================================
 	int n = A->n;
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"\n%d : sp_gemv\n",rang);
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
+		y[i] = 0;
+		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
+			int j = Aj[u];
+			double A_ij = Ax[u];
+			y[i] += A_ij * x[j];
+		}
+	}
+}
+
+void sp_gemv2(const struct csr_matrix_t *A, const double *x, double *y)
+{
+	int n = A->n;
+	int *Ap = A->Ap;
+	int *Aj = A->Aj;
+	double *Ax = A->Ax;
 	for (int i = 0; i < n; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
-			// Issue with Aj's value left un initialized
-			if(j>u && u > 55000){
-				j = 0;
-				fprintf(stderr, "%d : \\%d|%d/ fails, A[u+1] == %d\n",rang,j,u+n,Ap[i+1] );
-			}
-
 			y[i] += A_ij * x[j];
 		}
-
 	}
 }
-
 /*************************** Vector operations ********************************/
 
 /* dot product */
 double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
-	for (int i = 0; i < n; i++)
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 		sum += x[i] * y[i];
 	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-	fprintf(stderr, "%d : summmmmm = %f\n",rang,sum );
 	return sum;
 }
 
+double dot2(const int n, const double *x, const double *y)
+{
+	double sum = 0.0;
+	for (int i = 0; i < n; i++)
+		sum += x[i] * y[i];
+	return sum;
+}
+double norm2(const int n, const double *x)
+{
+	return sqrt(dot2(n, x, x));
+}
 /* euclidean norm (a.k.a 2-norm) */
 double norm(const int n, const double *x)
 {
@@ -336,11 +287,10 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 {
 	int n = A->n;
 	int nz = A->nz;
-	if (rang == 0) {
-		fprintf(stderr, "[CG] Starting iterative solver\n");
-		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (12.0 * nz + 52.0 * n));
-		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
-	}
+
+	fprintf(stderr, "[CG] Starting iterative solver\n");
+	fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (12.0 * nz + 52.0 * n));
+	fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
 
 	double *r = scratch + n;	// residue
 	double *z = scratch + 2 * n;	// preconditioned-residue
@@ -358,44 +308,33 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	for (int i = 0; i < n; i++)
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 		x[i] = 0.0;
-	for (int i = 0; i < n; i++)	// r <-- b - Ax == b
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- b - Ax == b
 		r[i] = b[i];
-	for (int i = 0; i < n; i++)	// z <-- M^(-1).r
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
 		z[i] = r[i] / d[i];
-	for (int i = 0; i < n; i++)	// p <-- z
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z
 		p[i] = z[i];
-	if (rang==0) {
-		sleep(3);
-	}else{
-		fprintf(stderr, "0 should be sleeping");
-		for (int i = 0; i < n; i++) {
-			//fprintf(stderr, "%d : z[i] = %f\n", rang,z[i]);
-		}
-	}
 
 	double rz = dot(n, r, z);
-	fprintf(stderr, "First dot of cg_solve done\n" );
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
-
 	while (norm(n, r) > epsilon) {
-
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
-		for (int i = 0; i < n; i++)	// x <-- x + alpha*p
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)// x <-- x + alpha*p
 			x[i] += alpha * p[i];
-		for (int i = 0; i < n; i++)	// r <-- r - alpha*q
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- r - alpha*q
 			r[i] -= alpha * q[i];
-		for (int i = 0; i < n; i++)	// z <-- M^(-1).r
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
 			z[i] = r[i] / d[i];
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
-		for (int i = 0; i < n; i++)	// p <-- z + beta*p
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
 		double t = wtime();
@@ -407,7 +346,6 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			fflush(stdout);
 			last_display = t;
 		}
-		fprintf(stderr, "norme > eps?%d\n",norm(n, r) > epsilon );
 	}
 	fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 }
@@ -424,13 +362,13 @@ struct option longopts[6] = {
 	{NULL, 0, NULL, 0}
 };
 
-
 int main(int argc, char **argv)
 {
 	MPI_Init(&argc,&argv);
 	MPI_Comm_size (MPI_COMM_WORLD, &nbp);
 	MPI_Comm_rank (MPI_COMM_WORLD,&rang);
 
+	/* Parse command-line options */
 	long long seed = 0;
 	char *rhs_filename = NULL;
 	char *matrix_filename = NULL;
@@ -458,7 +396,6 @@ int main(int argc, char **argv)
 			errx(1, "Unknown option");
 		}
 	}
-	/* Parse command-line options */
 
 	/* Load the matrix */
 	FILE *f_mat = stdin;
@@ -467,8 +404,8 @@ int main(int argc, char **argv)
 		if (f_mat == NULL)
 			err(1, "cannot matrix file %s", matrix_filename);
 	}
-	/* Initialisation de MPI */
 	struct csr_matrix_t *A = load_mm(f_mat);
+
 	/* Allocate memory */
 	int n = A->n;
 	double *mem = malloc(8 * n * sizeof(double));
@@ -480,54 +417,63 @@ int main(int argc, char **argv)
 
 	/* Prepare right-hand size */
 	if (rhs_filename) {	/* load from file */
-		if (rang == 0) {
-			FILE *f_b = fopen(rhs_filename, "r");
-			if (f_b == NULL)
-				err(1, "cannot open %s", rhs_filename);
-			fprintf(stderr, "[IO] Loading b from %s\n", rhs_filename);
-			for (int i = 0; i < n; i++) {
-				if (1 != fscanf(f_b, "%lg\n", &b[i]))
-					errx(1, "parse error entry %d\n", i);
-			}
-			fclose(f_b);
+		FILE *f_b = fopen(rhs_filename, "r");
+		if (f_b == NULL)
+			err(1, "cannot open %s", rhs_filename);
+		fprintf(stderr, "[IO] Loading b from %s\n", rhs_filename);
+		for (int i = 0; i < n; i++) {
+			if (1 != fscanf(f_b, "%lg\n", &b[i]))
+				errx(1, "parse error entry %d\n", i);
 		}
-		MPI_Scatter(b, n, MPI_DOUBLE, MPI_IN_PLACE, 0,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		fclose(f_b);
+	} else {
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
+			b[i] = PRF(i, seed);
 	}
-	else {
-		for (int i = 0; i < n; i++)
-			b[i] = PRF(i*(rang+1)*n, seed);
-	}
+
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
 
-	if (safety_check) {
-		double *y = scratch;
-		sp_gemv(A, x, y);	// y = Ax
-		for (int i = 0; i < n; i++)	// y = Ax - b
-			y[i] -= b[i];
-		double norme = norm(n, y);
-		if (rang == 0) {
-			fprintf(stderr, "[check] max error = %2.2e\n", norme);
-		}
-	}
-	// TO DO : parralléliser la lecture de fichier
-	double *X = NULL;
-	if (rang == 0) {
-		X = malloc(N*sizeof(double));
-		MPI_Gather(X,n/nbp,MPI_DOUBLE,x,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
-		/* Dump the solution vector */
-			FILE *f_x = stdout;
-			if (solution_filename != NULL) {
-				f_x = fopen(solution_filename, "w");
-				if (f_x == NULL)
-					err(1, "cannot open solution file %s", solution_filename);
-				fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
-			}
-			for (int i = 0; i < N; i++)
-				fprintf(f_x, "%a\n", X[i]);
+	if (rang != 0) {
+			MPI_Ssend(&x[rang*(n/nbp)],n/nbp, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
 	}
 	else{
-		MPI_Gather(x,n/nbp,MPI_DOUBLE,X,n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		// Root doit écrire le tableau final, on recoit les blocs dans un ordre aléatoire
+		for (int i = 0; i < nbp-1; i++) {
+			double *temp = malloc(n/nbp*sizeof(double));
+			MPI_Recv(temp,n/nbp,MPI_DOUBLE,MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
+			int giver = status.MPI_SOURCE;
+			for (int ii = 0; ii < n/nbp; ii++) {
+				x[giver*(n/nbp)+ii] = temp[ii];
+			}
+			free(temp);
+		}
+	}
+	// if(rang==0)
+	// 	for (int i = 0; i < n; i++)
+	// 		fprintf(stderr, "%a\n", x[i]);
+	/* Check result */
+		if (safety_check) {
+			double *y = scratch;
+			sp_gemv(A, x, y);	// y = Ax
+			for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// y = Ax - b
+				y[i] -= b[i];
+			double norme = norm(n, y);
+			if (rang == 0) {
+				fprintf(stderr, "[check] max error = %2.2e\n", norme);
+			}
+		}
+	if (rang==0) {
+		/* Dump the solution vector */
+		FILE *f_x = stdout;
+		if (solution_filename != NULL) {
+			f_x = fopen(solution_filename, "w");
+			if (f_x == NULL)
+				err(1, "cannot open solution file %s", solution_filename);
+			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
+		}
+		for (int i = 0; i < n; i++)
+			fprintf(f_x, "%a\n", x[i]);
 	}
 	MPI_Finalize();
 	return EXIT_SUCCESS;
