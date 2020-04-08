@@ -300,6 +300,9 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
+	if (rang==1)
+		for (int i = 0; i < n; i++)
+			fprintf(stderr, "d[%d] = %f\n", i, d[i]);
 
 	/*
 	 * This function follows closely the pseudo-code given in the (english)
@@ -324,6 +327,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	while (norm(n, r) > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
+		fprintf(stderr, "\n     old_rz = %a \n", old_rz);
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)// x <-- x + alpha*p

@@ -128,6 +128,15 @@ struct csr_matrix_t *load_mm(FILE * f)
 	}
 
 	/* -------- STEP 2: Convert to CSR (compressed sparse row) representation ----- */
+<<<<<<< HEAD:Projet/MPI/cg_load.c
+=======
+	double start2 = wtime();
+	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
+	double stop2 = wtime();
+	if(rang!=0)
+		fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
+>>>>>>> 36581539cb9d13b1358e8d76fcfb698550cb7090:Projet/MPI/cg_same_A.c
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
@@ -212,6 +221,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
+<<<<<<< HEAD:Projet/MPI/cg_load.c
 	else	{
 		Ap = malloc(((n/nbp)+1) * sizeof(*Ap)); //n+1 le plus 1 vient de la diagonale
 		Aj = malloc((-Ap[(rang*n/nbp)]+Ap[(rang+1)*n/nbp]) * sizeof(*Ap));
@@ -219,6 +229,19 @@ struct csr_matrix_t *load_mm(FILE * f)
 	}
 	// OK
 	A->n = n/nbp;
+=======
+
+	start = wtime();
+	MPI_Bcast(&sum,1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(Ap,n + 1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	stop = wtime();
+	if(rang!=0)
+		fprintf(stderr, "     ---> Envoie de sum, Ap, Aj et Ax %.1fs\n", stop - start);
+
+	A->n = n;
+>>>>>>> 36581539cb9d13b1358e8d76fcfb698550cb7090:Projet/MPI/cg_same_A.c
 	A->nz = sum;
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
