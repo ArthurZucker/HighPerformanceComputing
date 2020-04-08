@@ -43,14 +43,17 @@ MPI_Request request;
 [0,0,3,0]
 [0,6,0,0]
 		=
-Ax = [ 5 | 8 | 3 | 6 ]
-		 |P0 |P1 |P2 |P3 |
-Aj = [ 0 | 1 | 2 | 1 ]
-		 |P0 |P1 |P2 |P3 |
-Comment diviser Ap?
-Ap = [ 0 0 2 3 4 ]
-
-Si on divise nnz, on coupe Ax et Aj.
+Ax = [ 5 | 8 				| 3 			| 6 			]
+		 |P1 |P1 				|P2 			|P3 			|
+Aj = [ 0 | 1 				| 2 			| 1			 	]
+		 |P1 |P1 				|P2 			|P3 			|
+Ap = [ 0 | 0      	| 2 			| 3 			| 4 ]
+		 |P0 |P0 et P1 	|P1 et P2	|P2 et p3 |P3
+On ne peux que diviser par n, puisque sinon les produits n'aurait pas de sens
+soit x = [1,1,1,1]' pour Mx dans sp_gemv:
+Alors, 0 n'a accès qu'a y[0] (et donc q[0] dans cg_solve)
+D'aprè sla méthode du gradient, ils doivent tous
+avoir le même alpha et béta.
 */
 
 struct csr_matrix_t {
