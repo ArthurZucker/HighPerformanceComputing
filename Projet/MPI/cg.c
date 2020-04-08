@@ -276,7 +276,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	extract_diagonal(A, d);
 	if (rang==1)
 		for (int i = 0; i < n; i++)
-			//fprintf(stderr, "d[%d] = %f\n", i, d[i]);
+			fprintf(stderr, "d[%d] = %f\n", i, d[i]);
 
 	/*
 	 * This function follows closely the pseudo-code given in the (english)
@@ -427,9 +427,6 @@ int main(int argc, char **argv)
 			free(temp);
 		}
 	}
-	// if(rang==0)
-	// 	for (int i = 0; i < n; i++)
-	// 		fprintf(stderr, "%a\n", x[i]);
 	/* Check result */
 	if (safety_check) {
 		double *y = scratch;
