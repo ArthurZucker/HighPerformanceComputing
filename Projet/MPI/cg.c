@@ -52,8 +52,17 @@ Ap = [ 0 | 0      	| 2 			| 3 			| 4 ]
 On ne peux que diviser par n, puisque sinon les produits n'aurait pas de sens
 soit x = [1,1,1,1]' pour Mx dans sp_gemv:
 Alors, 0 n'a accès qu'a y[0] (et donc q[0] dans cg_solve)
-D'aprè sla méthode du gradient, ils doivent tous
+D'après la méthode du gradient, ils doivent tous
 avoir le même alpha et béta.
+Chaque processus a besoin de :
+ - Le n globale, son nbz = sum
+ - Son propre Ap, de taille n/nbz +1 puisque qu'il doit savoir la borne
+ - Son propre Aj, de taille sum, nb de coeffs dans ses lignes
+ - Son propre Ax, de taille sum, nb de coeffs dans ses lignes
+ - Soit on choisi qu'ils écrivent à 0, soit ils écrivent comme si le
+reste était occupé par les autres.
+	-	L'accès à n/nbz terme de d, quand on fait extract diagonale
+
 */
 
 struct csr_matrix_t {
