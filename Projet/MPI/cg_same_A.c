@@ -126,7 +126,8 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
 	double stop2 = wtime();
-	fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
+	if(rang!=0)
+		fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
@@ -192,7 +193,8 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	stop = wtime();
-	fprintf(stderr, "     ---> Envoie de sum, Ap, Aj et Ax %.1fs\n", stop - start);
+	if(rang!=0)
+		fprintf(stderr, "     ---> Envoie de sum, Ap, Aj et Ax %.1fs\n", stop - start);
 
 	A->n = n;
 	A->nz = sum;

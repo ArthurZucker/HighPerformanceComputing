@@ -230,26 +230,26 @@ struct csr_matrix_t *load_mm(FILE * f)
 	A->Ap = Ap;
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
-			MPI_Isend(&Aj[i], 2*tab[i],MPI_INT,i,0,MPI_COMM_WORLD,&request);
-			MPI_Isend(&Ax[i], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Aj[i*2*tab[i-1]], 2*tab[i],MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ax[i*2*tab[i-1]], 2*tab[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 		}
 	}
 	else{
 		MPI_Recv(Aj,2*sum,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(Ax,2*sum,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
-	if (rang == 1) {
-		fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
-		for (int i = 0; i < n; i++) {
-			for (int u = Ap[i]; u < Ap[i + 1]; u++){
-				fprintf(stderr,"\nAp[i+1] = %d\tsum = %d,[u] = %d\t",Ap[i+1],2*sum,u);
-				int j = Aj[u];
-				fprintf(stderr,"Aj = %d\t",j);
-				double A_ij = Ax[u];
-			}
-		}
-	}
-	sleep(4);
+	// if (rang == 1) {
+	// 	fprintf(stderr,"\n______________--------_____----_-_-____-_-_-__-_-_-____------\n" );
+	// 	for (int i = 0; i < n; i++) {
+	// 		for (int u = Ap[i]; u < Ap[i + 1]; u++){
+	// 			fprintf(stderr,"\nAp[i+1] = %d\tsum = %d,[u] = %d\t",Ap[i+1],2*sum,u);
+	// 			int j = Aj[u];
+	// 			fprintf(stderr,"Aj = %d\t",j);
+	// 			double A_ij = Ax[u];
+	// 		}
+	// 	}
+	// }
+
 	A->Aj = Aj;
 	A->Ax = Ax;
 	return A;
@@ -264,12 +264,19 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"\n%d : extract_diagonal\n",rang);
+	//fprintf(stderr,"\n%d : extract_diagonal\n",rang);
 	for (int i = 0; i < n; i++) {
 		d[i] = 0.0;
-		for (int u = Ap[i]; u < Ap[i + 1]; u++)
-			if (i == Aj[u])
+		for (int u = Ap[i]; u < Ap[i + 1]; u++){
+			fprintf(stderr,"\n%d \n",i);
+			fprintf(stderr,"\n Aj[u]=%d \n",Aj[u]);
+			if (i == Aj[u]){
 				d[i] += Ax[u];
+				//if(rang==0)
+				fprintf(stderr,"\n%d : extract_diagonal i=%d u=%d Aj[u]= %d \n",rang,i,u,Aj[u]);
+			}
+			fprintf(stderr,"\n%d : extract_diagonal i=%d u=%d Aj[u]= %d \n",rang,i,u,Aj[u]);
+		}
 	}
 }
 
@@ -281,7 +288,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	fprintf(stderr,"\n%d : sp_gemv\n",rang);
+	//fprintf(stderr,"\n%d : sp_gemv\n",rang);
 	for (int i = 0; i < n; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
@@ -290,7 +297,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 			// Issue with Aj's valu left un initialized
 			if(j>u && u > 55000){
 				j = 0;
-				fprintf(stderr, "%d : \\%d|%d/ fails, A[u+1] == %d\n",rang,j,u+n,Ap[i+1] );
+				//fprintf(stderr, "%d : \\%d|%d/ fails, A[u+1] == %d\n",rang,j,u+n,Ap[i+1] );
 			}
 
 			y[i] += A_ij * x[j];
@@ -339,6 +346,9 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
+	if (rang==1)
+		for (int i = 0; i < n; i++)
+			fprintf(stderr, "d[%d] = %f\n", i, d[i]);
 
 	/*
 	 * This function follows closely the pseudo-code given in the (english)
@@ -356,14 +366,17 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	for (int i = 0; i < n; i++)	// p <-- z
 		p[i] = z[i];
 	double rz = dot(n, r, z);
+	fprintf(stderr, "\n     rz = %a \n", rz);
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
 	while (norm(n, r) > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
+		fprintf(stderr, "\n     old_rz = %a \n", old_rz);
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
+		fprintf(stderr, "\n     alpha = %a \n", alpha);
 		for (int i = 0; i < n; i++)	// x <-- x + alpha*p
 			x[i] += alpha * p[i];
 		for (int i = 0; i < n; i++)	// r <-- r - alpha*q
@@ -471,8 +484,13 @@ int main(int argc, char **argv)
 	}
 	else {
 		for (int i = 0; i < n; i++)
-			b[i] = PRF(i*rang*n, seed);
+			b[i] = PRF(i*(rang+1)*n, seed);
 	}
+	// if (rang==1)
+	// 	for (int i = 0; i < n; i++)
+	// 		fprintf(stderr, "b[%d] = %f\n", i, b[i]);
+	//
+	// fprintf(stderr, "n = %d\n", n);
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
 

@@ -20,13 +20,12 @@ params['matrix'] = "cfd1"
 params['users'] = ["Clement Apavou", "Arthur Zucker"]
 
 # Description du code exécuté
-params['software'] = """Code séquentiel fourni.
-Pas d'améliorations apportées."""
+params['software'] = """Code MPI """
 
 # Description du matériel utilisé pour l'exécution
 params['nodes'] = 1   # nombre de noeuds
 params['cores'] = 2   # nombre total de coeurs
-params['hardware'] = """ mon pc"""
+params['hardware'] = """ PC de clément 8 GO RAM 2 CORES 3GHZ """
 
 # Comment exécuter le solveur :
 #   {matrix} sera remplacé par la valeur ci-dessus.
@@ -34,7 +33,7 @@ params['hardware'] = """ mon pc"""
 #   {cores}  sera remplacé par la valeur ci-dessus.
 #   {seed}   sera remplacé par la valeur fournie par le serveur.
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
-command_line = "./cg_same_A --matrix ../Matrix/{matrix}.mtx --seed {seed}"
+command_line = "mpirun -n 2 -hostfile hostfile --map-by node ./cg_same_A --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
 #command_line = "mpiexec --n {cores} --hostfile nodes.txt --display-map ./cg --matrix {matrix}.mtx --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
