@@ -268,7 +268,6 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (12.0 * nz + 52.0 * n));
 		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
 	}
-
 	double *r = scratch + n;	// residue
 	double *z = scratch + 2 * n;	// preconditioned-residue
 	double *p = scratch + 3 * n;	// search direction
@@ -334,7 +333,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		}
 
 	}
-	if (rang>0) {
+	if (rang==0) {
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 	}
 }
