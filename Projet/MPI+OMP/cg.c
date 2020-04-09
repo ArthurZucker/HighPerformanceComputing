@@ -216,9 +216,12 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	double *Ax = A->Ax;
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 		d[i] = 0.0;
+		double d2=0;
+		#pragma omp parallel for reduction(+:d2)
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
 			if (i == Aj[u])
-				d[i] += Ax[u];
+				d2 += Ax[u];
+		d[i]=d2;
 	}
 }
 
