@@ -12,7 +12,7 @@ mmio.o : mmio.c mmio.h
 cg.o : cg.c mmio.h
 #mpirun -n 4 -hostfile hostfile --map-by node zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/bcsstk13.mtx.gz | ./cg
 run :
-	mpirun -n 8 -hostfile hostfile --map-by node zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/cfd1.mtx.gz | ./cg 
+	mpirun -n 20  -hostfile hostfile --map-by node sh -c "zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/hood.mtx.gz  | ./cg " > /dev/null
 debug:
 	mpirun -np 2 gdb -ex run --args ./cg --matrix ../Matrix/cfd1.mtx
 .PHONY: clean
