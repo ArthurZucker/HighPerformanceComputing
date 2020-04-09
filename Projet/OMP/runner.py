@@ -3,27 +3,29 @@ import array
 import subprocess
 import json
 import sys
+import os
+from hashlib import sha256
+import base64
 
 #################################################################
 
 # Paramètres du système (ne pas modifier)
 SERVER = "https://hpc.fil.cool"
 params = {}
-params['version'] = 2
-params['proof'] = 0x654ec1942f6b9f51
+params['version'] = 3
+params['proof'] = 0x65dec1542f679f51
 
 # Paramètres du calcul (à adapter)
-params['matrix'] = "bcsstk13"
-params['users'] = ["Clement Apavou", "Arthur Zucker"]
+params['matrix'] = "cfd1"
+params['users'] = ["Arthur Zucker", "Clément Apavou"]
 
 # Description du code exécuté
-params['software'] = """Code séquentiel fourni.
-Pas d'améliorations apportées."""
+params['software'] = """OMP."""
 
 # Description du matériel utilisé pour l'exécution
-params['nodes'] = 4   # nombre de noeuds
-params['cores'] = 8   # nombre total de coeurs
-params['hardware'] = """iMac pro de Arthur, 8 coeurs 32Go RAM mémoire ECC"""
+params['nodes'] = 1   # nombre de noeuds
+params['cores'] = 2   # nombre total de coeurs
+params['hardware'] = """Chez Arthur 32g RAM."""
 
 # Comment exécuter le solveur :
 #   {matrix} sera remplacé par la valeur ci-dessus.
@@ -31,9 +33,9 @@ params['hardware'] = """iMac pro de Arthur, 8 coeurs 32Go RAM mémoire ECC"""
 #   {cores}  sera remplacé par la valeur ci-dessus.
 #   {seed}   sera remplacé par la valeur fournie par le serveur.
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
-command_line = "./cg --matrix ./Matrix/{matrix}.mtx --seed {seed}"
+command_line = "./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
-#command_line = "mpiexec --n {cores} --hostfile nodes.txt --display-map ./cg --matrix {matrix}.mtx --seed {seed}"
+#command_line = "mpiexec --n {cores} --hostfile nodes.txt ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
 
 ######################### Main Program ###########################
@@ -42,6 +44,28 @@ def main():
     # vérifie que le script a bien été modifié !
     assert "Charles Bouillaguet" not in params['users']
 
+    checkpoint_filename = "checkpoint-{}.json".format(params['matrix'])
+
+    if not os.path.exists(checkpoint_filename):
+        # pas de checkpoint : on fait le calcul.
+        seed, x, e, secret, chunks = do_computation()
+        # OK, maintenant on peut se relaxer et prendre notre temps. Le serveur sait
+        # qu'on a fini. On a intérêt à sauvegarder notre état interne, juste au cas
+        # où un problème ait lieu.
+        checkpoint(checkpoint_filename, seed, x, e)
+    else:
+        # reprise en cas de panne à partir du checkpoint
+        seed, x, e, secret, chunks = restart(checkpoint_filename)
+
+    # prouve au serveur qu'on a fait le calcul correctement, obtient un reçu, supprime le checkpoint
+    do_proof(seed, x, e, secret, chunks)
+    os.unlink(checkpoint_filename)
+
+
+def do_computation():
+    """
+    Obtient un challenge auprès du serveur et lance le calcul.
+    """
     print("--> [Connecting]")
     print()
 
@@ -95,30 +119,42 @@ def main():
     print("--> [Sending]")
     print()
 
-    e = request(SERVER + "/stop", stuff=d['stuff'], commitment=commitment)
+    e = request(SERVER + "/stop", stuff=d['stuff'], commitment=commitment, xsize=len(x))
     print("SERVER says : {}".format(e['msg']))
     print('SERVER wants me to transmit {} "random" coefficients of x (out of {})'.format(len(e['transmit']), len(x)))
     print("SERVER wants me to decommit x[{}]".format(e['challenge']))
     print()
 
-    # OK, maintenant on peut se relaxer et prendre notre temps. Le serveur sait
-    # qu'on a fini. On a intérêt à sauvegarder notre état interne, juste au cas
-    # où un problème ait lieu.
+    return d['seed'], x, e, secret, chunks
 
+
+
+def checkpoint(filename, seed, x, e):
+    """
+    Sauvegarde l'état actuel du processus.
+    """
     print("--> [Checkpointing]")
-    stuff = e['stuff']
-    with open("checkpoint.json", "w") as f:
-        json.dump([stuff, x], f)
+    with open(filename, "w") as f:
+        json.dump([seed, x, e], f)
     print()
 
-    # Reprise en cas de panne :
-    # with open("checkpoint.json", "r") as f:
-    #     stuff, x = json.load(f, state)
-    #     xbytes = array.array('d', x).tobytes()
-    #     chunks = [xbytes[i:i + 304] for i in range(0, len(xbytes), 304)]
-    #     commitment, secret = commit(chunks)
 
-    # Maintenant, pour obtenur un reçu, il faut convaincre le serveur qu'on a
+def restart(filename):
+    """
+    Reprise à partir du checkpoint
+    """
+    print("--> [Warm start from checkpoint]")
+    with open(filename, "r") as f:
+        seed, x, e = json.load(f)
+    print("--> [Computing commitment]")
+    xbytes = array.array('d', x).tobytes()
+    chunks = [xbytes[i:i + 304] for i in range(0, len(xbytes), 304)]
+    _, secret = commit(chunks)
+    return seed, x, e, secret, chunks
+
+
+def do_proof(seed, x, e, secret, chunks):
+    # Maintenant, pour obtenir un reçu, il faut convaincre le serveur qu'on a
     # effectué le calcul correctement. On pourrait envoyer tout x, mais c'est
     # trop long (il peut faire des dizaines de Mo).
     # Pour régler ce problème, une réunion au sommet s'est tenue entre les
@@ -138,12 +174,12 @@ def main():
     print()
 
     # YES ! On a obtenu le reçu du serveur. On le sauvegarde précieusement.
-
-    receipt_filename = "{}-{}.receipt".format(params['matrix'], d['seed'])
+    receipt_filename = "{}-{}.receipt".format(params['matrix'], seed)
     print("--> [writing receipt in {}]".format(receipt_filename))
     with open(receipt_filename, "w") as file:
         json.dump(f['receipt'], file)
     print()
+
 
 ##################################################################
 # Fonctions auxiliaires
@@ -169,7 +205,6 @@ def commit(it):
     Prend en entrée un iterable d'objets de type bytes(), et renvoie une
     paire (mise en gage, secret). Le secret est ensuite utilisé par decommit().
     """
-    from hashlib import sha256
     stack = {}
     def H(x):
         return sha256(x).digest()
@@ -198,7 +233,6 @@ def decommit(secret, x, i):
     Renvoie une "preuve" que la mise en gage a été effectuée correctement. La
     preuve contient la valeur de x[i].
     """
-    import base64
     n = len(x)
     proof = []
     if n > 1:
