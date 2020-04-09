@@ -16,7 +16,7 @@ params['version'] = 3
 params['proof'] = 0x65dec1542f679f51
 
 # Paramètres du calcul (à adapter)
-params['matrix'] = "hood"
+params['matrix'] = "cfd1"
 params['users'] = ["Arthur Zucker", "Clément Apavou"]
 
 # Description du code exécuté
@@ -24,8 +24,8 @@ params['software'] = """Code séquentiel fourni.
 Pas d'améliorations apportées."""
 
 # Description du matériel utilisé pour l'exécution
-params['nodes'] = 4   # nombre de noeuds
-params['cores'] = 4   # nombre total de coeurs
+params['nodes'] = 1   # nombre de noeuds
+params['cores'] = 2   # nombre total de coeurs
 params['hardware'] = """Chez Arthur 32g RAM."""
 
 # Comment exécuter le solveur :
