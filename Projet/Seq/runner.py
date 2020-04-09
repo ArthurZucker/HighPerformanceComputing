@@ -16,7 +16,11 @@ params['version'] = 3
 params['proof'] = 0x65dec1542f679f51
 
 # Paramètres du calcul (à adapter)
+<<<<<<< HEAD
 params['matrix'] = "cfd2"
+=======
+params['matrix'] = "Serena"
+>>>>>>> c93c87ff2c6676390c9d5bfb8a3c723ea845ab69
 params['users'] = ["Arthur Zucker", "Clément Apavou"]
 
 # Description du code exécuté
@@ -34,9 +38,9 @@ params['hardware'] = """Chez Arthur 32g RAM."""
 #   {cores}  sera remplacé par la valeur ci-dessus.
 #   {seed}   sera remplacé par la valeur fournie par le serveur.
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
-command_line = "./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
-#command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
-#command_line = "mpiexec --n {cores} --hostfile nodes.txt ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
+#command_line = "./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
+command_line = "sh -c 'zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/{matrix}.mtx.gz | ./cg' --seed {seed}"
+#command_line = "mpiexec --n {cores} --hostfile ../hostfile sh -c 'zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/{matrix}.mtx.gz | ./cg' --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
 
 ######################### Main Program ###########################

@@ -17,6 +17,7 @@
 cg
 *.txt
 Makefile
+runner.py
 # Precompiled Headers
 *.gch
 *.pch
