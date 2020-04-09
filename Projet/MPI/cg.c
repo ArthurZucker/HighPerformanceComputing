@@ -191,14 +191,14 @@ struct csr_matrix_t *load_mm(FILE * f)
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
-			MPI_Isend(&Ap[u], (n/nbp)+1,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Send(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD);
 			MPI_Send(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD);
 			MPI_Send(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD);
 		}
 	}
 	else{
 		int u = rang*n/nbp;
-		MPI_Recv(&Ap[u],(n/nbp)+1,MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(&Aj[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(&Ax[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
