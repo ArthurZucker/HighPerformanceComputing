@@ -17,10 +17,10 @@ params['proof'] = 0x65dec1542f679f51
 
 # Paramètres du calcul (à adapter)
 <<<<<<< HEAD
-params['matrix'] = "cfd1"
+params['matrix'] = "cfd2"
 =======
-params['matrix'] = "Serena"
->>>>>>> dd535e43997d7a87508ea7ebdfb61f9c590d53ae
+params['matrix'] = "cfd1"
+>>>>>>> c93c87ff2c6676390c9d5bfb8a3c723ea845ab69
 params['users'] = ["Arthur Zucker", "Clément Apavou"]
 
 # Description du code exécuté
@@ -28,7 +28,7 @@ params['software'] = """MPI"""
 
 # Description du matériel utilisé pour l'exécution
 params['nodes'] = 4   # nombre de noeuds
-params['cores'] = 20   # nombre total de coeurs
+params['cores'] = 2   # nombre total de coeurs
 params['hardware'] = """ppti-14-408-01 à ppti-14-408-10"""
 
 # Comment exécuter le solveur :
@@ -39,8 +39,8 @@ params['hardware'] = """ppti-14-408-01 à ppti-14-408-10"""
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
 #command_line = "./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
-#command_line = "mpiexec --n {cores} --hostfile hostfile ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
-command_line = "mpiexec --n {cores} --hostfile hostfile sh -c 'zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/cfd1.mtx.gz  | ./cg'  --matrix  --seed {seed}"
+command_line = "mpiexec --n {cores} --hostfile hostfile ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
+#command_line = "mpiexec --n {cores} --hostfile hostfile sh -c 'zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/cfd1.mtx.gz  | ./cg'  --matrix  --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
 
 ######################### Main Program ###########################
