@@ -16,17 +16,16 @@ params['version'] = 3
 params['proof'] = 0x65dec1542f679f51
 
 # Paramètres du calcul (à adapter)
-params['matrix'] = "cfd1"
+params['matrix'] = "Serena"
 params['users'] = ["Arthur Zucker", "Clément Apavou"]
 
 # Description du code exécuté
-params['software'] = """Code séquentiel fourni.
-Pas d'améliorations apportées."""
+params['software'] = """MPI"""
 
 # Description du matériel utilisé pour l'exécution
 params['nodes'] = 4   # nombre de noeuds
-params['cores'] = 4   # nombre total de coeurs
-params['hardware'] = """Chez Arthur 32g RAM."""
+params['cores'] = 20   # nombre total de coeurs
+params['hardware'] = """ppti-14-408-01 à ppti-14-408-10"""
 
 # Comment exécuter le solveur :
 #   {matrix} sera remplacé par la valeur ci-dessus.
@@ -35,8 +34,8 @@ params['hardware'] = """Chez Arthur 32g RAM."""
 #   {seed}   sera remplacé par la valeur fournie par le serveur.
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
 #command_line = "./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
-#command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
-command_line = "mpiexec --n {cores} --hostfile nodes.txt ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
+#command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"export https_proxy="proxy.ufr-info-p6.jussieu.fr:3128"
+command_line = "mpiexec --n {cores} -hostfile nodes sh -c 'zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/{matrix}.mtx.gz |./cg' --matrix --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
 
 ######################### Main Program ###########################
