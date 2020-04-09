@@ -126,7 +126,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
 	double stop2 = wtime();
-	if(rang==0)
+	if (rang==0)
 		fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
@@ -193,7 +193,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	stop = wtime();
-	if(rang==0)
+	if (rang==0)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
@@ -263,7 +263,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 {
 	int n = A->n;
 	int nz = A->nz;
-	if(rang==0){
+	if (rang==0) {
 		fprintf(stderr, "[CG] Starting iterative solver\n");
 		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (12.0 * nz + 52.0 * n));
 		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
@@ -321,14 +321,17 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		iter++;
 		double norme = norm(n, r);
 		double t = wtime();
-		if (t - last_display > 0.5 && rang==0) {
-			/* verbosity */
-			double rate = iter / (t - start);	// iterations per s.
-			double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
-			fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
-			fflush(stdout);
-			last_display = t;
+		if (rang==0) {
+			if (t - last_display > 0.5) {
+				/* verbosity */
+				double rate = iter / (t - start);	// iterations per s.
+				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
+				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
+				fflush(stdout);
+				last_display = t;
+			}
 		}
+
 	}
 	if (rang==0) {
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);

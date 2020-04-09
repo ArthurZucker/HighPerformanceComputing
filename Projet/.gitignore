@@ -14,7 +14,9 @@
 *.ilk
 *.map
 *.exp
-
+cg
+*.txt
+Makefile
 # Precompiled Headers
 *.gch
 *.pch
