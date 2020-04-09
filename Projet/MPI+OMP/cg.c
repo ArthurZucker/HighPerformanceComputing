@@ -20,9 +20,6 @@
  *      # downloading and uncompressing the matrix on the fly
  *	$ curl --silent http://hpc.fil.cool/matrix/bcsstk13.mtx.gz | zcat | ./cg
  */
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <err.h>
@@ -31,6 +28,10 @@
 #include <sys/time.h>
 #include <mpi.h>
 #include "mmio.h"
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 int rang,nbp;
 MPI_Status status;
@@ -214,14 +215,15 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
-		d[i] = 0.0;
-		double d2=0;
-		#pragma omp parallel for reduction(+:d2)
-		for (int u = Ap[i]; u < Ap[i + 1]; u++)
-			if (i == Aj[u])
-				d2 += Ax[u];
-		d[i]=d2;
+	#pragma omp parallel reduction(+:d[rang*n/nbp:(rang+1)*n/nbp])
+	{
+		#pragma omp for
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
+			d[i] = 0.0;
+			for (int u = Ap[i]; u < Ap[i + 1]; u++)
+				if (i == Aj[u])
+					d[i] += Ax[u];
+		}
 	}
 }
 
@@ -232,13 +234,17 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
-		y[i] = 0;
-		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
-			int j = Aj[u];
-			double A_ij = Ax[u];
-			y[i] += A_ij * x[j];
-		}
+	// #pragma omp parallel reduction(+:y[rang*n/nbp:(rang+1)*n/nbp])
+	// {
+	// 	#pragma omp for
+		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
+			y[i] = 0;
+			for (int u = Ap[i]; u < Ap[i + 1]; u++) {
+				int j = Aj[u];
+				double A_ij = Ax[u];
+				y[i] += A_ij * x[j];
+			}
+		// }
 	}
 }
 
@@ -248,6 +254,8 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
+	//tester l'éfficacité
+	#pragma omp parallel for reduction(+:sum)
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 		sum += x[i] * y[i];
 	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
@@ -310,6 +318,8 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double old_rz = rz;
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
+
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
 			r[i] -= alpha * q[i];
@@ -321,6 +331,8 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		//
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
+
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
@@ -416,7 +428,9 @@ int main(int argc, char **argv)
 				errx(1, "parse error entry %d\n", i);
 		}
 		fclose(f_b);
-	} else {
+	}
+	else {
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 			b[i] = PRF(i, seed);
 	}
@@ -429,6 +443,7 @@ int main(int argc, char **argv)
 	if (safety_check) {
 		double *y = scratch;
 		sp_gemv(A, x, y);	// y = Ax
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// y = Ax - b
 			y[i] -= b[i];
 		double norme = norm(n, y);
@@ -456,6 +471,7 @@ int main(int argc, char **argv)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
+		#pragma omp parallel for
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
