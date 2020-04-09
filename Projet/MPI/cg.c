@@ -188,10 +188,25 @@ struct csr_matrix_t *load_mm(FILE * f)
 	}
 
 	start = wtime();
-	MPI_Bcast(&sum,1,MPI_INT,0,MPI_COMM_WORLD);
-	MPI_Bcast(Ap,n + 1,MPI_INT,0,MPI_COMM_WORLD);
-	MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
-	MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	if (rang==0) {
+		for (int i = 1; i < nbp; i++) {
+			int u = i*n/nbp;
+			MPI_Isend(&Ap[u], (n/nbp)+1,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Send(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD);
+			MPI_Send(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD);
+		}
+	}
+	else{
+		int u = rang*n/nbp;
+		MPI_Recv(&Ap[u],(n/nbp)+1,MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Aj[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Ax[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+	}
+	//Only send what's needed
+	// MPI_Bcast(&sum,1,MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Bcast(Ap,n + 1,MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	stop = wtime();
 	if (rang==0)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
@@ -334,7 +349,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		}
 
 	}
-	if (rang>0) {
+	if (rang==0) {
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 	}
 }

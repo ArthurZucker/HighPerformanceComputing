@@ -128,15 +128,12 @@ struct csr_matrix_t *load_mm(FILE * f)
 	}
 
 	/* -------- STEP 2: Convert to CSR (compressed sparse row) representation ----- */
-<<<<<<< HEAD:Projet/MPI/cg_load.c
-=======
 	double start2 = wtime();
 	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
 	double stop2 = wtime();
 	if(rang!=0)
 		fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
->>>>>>> 36581539cb9d13b1358e8d76fcfb698550cb7090:Projet/MPI/cg_same_A.c
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
