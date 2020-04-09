@@ -20,6 +20,9 @@
  *      # downloading and uncompressing the matrix on the fly
  *	$ curl --silent http://hpc.fil.cool/matrix/bcsstk13.mtx.gz | zcat | ./cg
  */
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <err.h>
