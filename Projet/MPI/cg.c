@@ -212,7 +212,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
-	A->nz = sum;
+	A->nz = Ap[(rang+1)*n/nbp] - Ap[rang*n/nbp];
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
@@ -339,6 +339,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		if (rang==0) {
 			if (t - last_display > 0.5) {
 				/* verbosity */
+
 				double rate = iter / (t - start);	// iterations per s.
 				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
 				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);

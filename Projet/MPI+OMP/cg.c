@@ -211,7 +211,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
-	A->nz = sum;
+	A->nz = Ap[(rang+1)*n/nbp] - Ap[rang*n/nbp];
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
