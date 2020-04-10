@@ -130,7 +130,8 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
 	double stop2 = wtime();
-	fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
+	if (rang==0)
+		fprintf(stderr, "     ---> exchange of and nnz %.1fs\n", stop2 - start2);
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
@@ -191,15 +192,26 @@ struct csr_matrix_t *load_mm(FILE * f)
 	}
 
 	start = wtime();
-	MPI_Bcast(&sum,1,MPI_INT,0,MPI_COMM_WORLD);
-	MPI_Bcast(Ap,n + 1,MPI_INT,0,MPI_COMM_WORLD);
-	MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
-	MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	if (rang==0) {
+		for (int i = 1; i < nbp; i++) {
+			int u = i*n/nbp;
+			MPI_Send(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD);
+			MPI_Send(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD);
+			MPI_Send(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD);
+		}
+	}
+	else{
+		int u = rang*n/nbp;
+		MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Aj[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Ax[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+	}
 	stop = wtime();
-	fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
+	if (rang==0)
+		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
-	A->nz = sum;
+	A->nz = Ap[(rang+1)*n/nbp] - Ap[rang*n/nbp];
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
@@ -239,15 +251,14 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	// 	#pragma omp for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 			y[i] = 0;
-			// #pragma omp parallel reduction(+:y[i]){
-			// #pragma omp for
+			// #pragma omp for parallel reduction(+:y[i])
 			for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 				int j = Aj[u];
 				double A_ij = Ax[u];
 				y[i] += A_ij * x[j];
 			}
 		}
-	// }
+
 }
 
 /*************************** Vector operations ********************************/
@@ -278,10 +289,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	int n = A->n;
 	int nz = A->nz;
 
-	fprintf(stderr, "[CG] Starting iterative solver\n");
-	fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (12.0 * nz + 52.0 * n));
-	fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
-
+	if (rang==0) {
+		fprintf(stderr, "[CG] Starting iterative solver\n");
+		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (12.0 * nz + 52.0 * n));
+		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
+	}
 	double *r = scratch + n;	// residue
 	double *z = scratch + 2 * n;	// preconditioned-residue
 	double *p = scratch + 3 * n;	// search direction
@@ -321,6 +333,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 
+		//vectorisation peut être faite ici
 		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
@@ -340,13 +353,15 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		iter++;
 		double norme = norm(n, r);
 		double t = wtime();
-		if (t - last_display > 0.5) {
-			/* verbosity */
-			double rate = iter / (t - start);	// iterations per s.
-			double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
-			fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
-			fflush(stdout);
-			last_display = t;
+		if (rang==0) {
+			if (t - last_display > 0.5) {
+				/* verbosity */
+				double rate = iter / (t - start);	// iterations per s.
+				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
+				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
+				fflush(stdout);
+				last_display = t;
+			}
 		}
 	}
 	if (rang==0) {

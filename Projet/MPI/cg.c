@@ -191,14 +191,14 @@ struct csr_matrix_t *load_mm(FILE * f)
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
-			MPI_Isend(&Ap[u], (n/nbp)+1,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Send(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD);
 			MPI_Send(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD);
 			MPI_Send(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD);
 		}
 	}
 	else{
 		int u = rang*n/nbp;
-		MPI_Recv(&Ap[u],(n/nbp)+1,MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(&Aj[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_INT,0,0,MPI_COMM_WORLD,&status);
 		MPI_Recv(&Ax[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
 	}
@@ -212,7 +212,7 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
-	A->nz = sum;
+	A->nz = Ap[(rang+1)*n/nbp] - Ap[rang*n/nbp];
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
@@ -339,6 +339,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		if (rang==0) {
 			if (t - last_display > 0.5) {
 				/* verbosity */
+
 				double rate = iter / (t - start);	// iterations per s.
 				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
 				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
