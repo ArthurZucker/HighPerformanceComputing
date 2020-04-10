@@ -130,7 +130,8 @@ struct csr_matrix_t *load_mm(FILE * f)
 	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
 	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
 	double stop2 = wtime();
-	fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
+	if (rang==0)
+		fprintf(stderr, "     ---> exchange of and nnz %.1fs\n", stop2 - start2);
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
