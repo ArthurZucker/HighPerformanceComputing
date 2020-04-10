@@ -16,8 +16,7 @@
 *.exp
 cg
 *.txt
-Makefile
-runner.py
+
 # Precompiled Headers
 *.gch
 *.pch
@@ -56,3 +55,5 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+Makefile
+runner.py
