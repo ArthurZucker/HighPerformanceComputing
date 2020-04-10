@@ -251,7 +251,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	// 	#pragma omp for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 			y[i] = 0;
-			#pragma omp for parallel reduction(+:y[i])
+			// #pragma omp for parallel reduction(+:y[i])
 			for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 				int j = Aj[u];
 				double A_ij = Ax[u];
