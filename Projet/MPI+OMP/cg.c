@@ -303,7 +303,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	#pragma omp parallel for schedule(static)
+	#pragma omp parallel for
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){
 		x[i] = 0.0;
 		r[i] = b[i];
@@ -328,7 +328,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double alpha = old_rz / dot(n, p, q);
 
 		//vectorisation peut être faite ici
-		#pragma omp parallel for schedule(static)
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
 			r[i] -= alpha * q[i];
@@ -341,7 +341,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
 
-		#pragma omp parallel for schedule(static)
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
@@ -441,7 +441,7 @@ int main(int argc, char **argv)
 		fclose(f_b);
 	}
 	else {
-		#pragma omp parallel for schedule(static)
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 			b[i] = PRF(i, seed);
 	}
@@ -454,7 +454,7 @@ int main(int argc, char **argv)
 	if (safety_check) {
 		double *y = scratch;
 		sp_gemv(A, x, y);	// y = Ax
-		#pragma omp parallel for schedule(static)
+		#pragma omp parallel for
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// y = Ax - b
 			y[i] -= b[i];
 		double norme = norm(n, y);
@@ -482,7 +482,7 @@ int main(int argc, char **argv)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
-		#pragma omp parallel for schedule(static)
+		#pragma omp parallel for 
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
