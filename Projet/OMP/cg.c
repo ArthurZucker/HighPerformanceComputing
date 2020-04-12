@@ -192,15 +192,11 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	#pragma omp parallel reduction(+:d[0:n])
-	{
-		#pragma omp for
-		for (int i = 0; i < n; i++) {
-			d[i] = 0.0;
-			for (int u = Ap[i]; u < Ap[i + 1]; u++)
-				if (i == Aj[u])
-					d[i] += Ax[u];
-		}
+	for (int i = 0; i < n; i++) {
+		d[i] = 0.0;
+		for (int u = Ap[i]; u < Ap[i + 1]; u++)
+			if (i == Aj[u])
+				d[i] += Ax[u];
 	}
 }
 
@@ -211,13 +207,17 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	for (int i = 0; i < n; i++) {
+
+	#pragma omp parallel for
+	for (int i = 0; i < n; i++){
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
 			y[i] += A_ij * x[j];
+			//fprintf(stderr, " thread num : %d/%d %f %f\n",omp_get_thread_num()+1,omp_get_num_threads(), x[j], A_ij);
 		}
+		//fprintf(stderr, "%f\n",y[i]);
 	}
 }
 
@@ -227,6 +227,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
+	#pragma omp parallel for reduction(+:sum)
 	for (int i = 0; i < n; i++)
 		sum += x[i] * y[i];
 	return sum;
