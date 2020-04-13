@@ -227,15 +227,12 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	#pragma omp parallel reduction(+:d[rang*n/nbp:(rang+1)*n/nbp])
-	{
-		#pragma omp for
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
-			d[i] = 0.0;
-			for (int u = Ap[i]; u < Ap[i + 1]; u++)
-				if (i == Aj[u])
-					d[i] += Ax[u];
-		}
+
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
+		d[i] = 0.0;
+		for (int u = Ap[i]; u < Ap[i + 1]; u++)
+			if (i == Aj[u])
+				d[i] += Ax[u];
 	}
 }
 
@@ -245,20 +242,17 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int n = A->n;
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
-	double *Ax = A->Ax;
-	// #pragma omp parallel reduction(+:y[rang*n/nbp:(rang+1)*n/nbp])
-	// {
-	// 	#pragma omp for
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
-			y[i] = 0;
-			// #pragma omp for parallel reduction(+:y[i])
-			for (int u = Ap[i]; u < Ap[i + 1]; u++) {
-				int j = Aj[u];
-				double A_ij = Ax[u];
-				y[i] += A_ij * x[j];
-			}
-		}
+ 	double *Ax = A->Ax;
 
+	#pragma omp parallel for schedule(guided)
+	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
+		y[i] = 0;
+		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
+			int j = Aj[u];
+			double A_ij = Ax[u];
+			y[i] += A_ij * x[j];
+		}
+	}
 }
 
 /*************************** Vector operations ********************************/
@@ -488,7 +482,7 @@ int main(int argc, char **argv)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
