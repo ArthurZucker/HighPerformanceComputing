@@ -263,7 +263,7 @@ double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
 	//tester l'éfficacité
-	#pragma omp parallel for simd reduction(+:sum)
+	#pragma omp parallel for reduction(+:sum)
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 		sum += x[i] * y[i];
 	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
