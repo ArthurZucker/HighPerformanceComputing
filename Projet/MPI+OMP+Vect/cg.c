@@ -247,6 +247,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	#pragma omp parallel for schedule(guided)
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 		y[i] = 0;
+		#pragma omp simd
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
@@ -262,7 +263,7 @@ double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
 	//tester l'éfficacité
-	#pragma omp parallel for reduction(+:sum)
+	#pragma omp parallel for simd reduction(+:sum)
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 		sum += x[i] * y[i];
 	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
@@ -482,7 +483,7 @@ int main(int argc, char **argv)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
-		#pragma omp parallel for 
+		#pragma omp parallel for
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
