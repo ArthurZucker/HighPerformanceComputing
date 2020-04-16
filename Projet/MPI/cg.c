@@ -475,11 +475,6 @@ int main(int argc, char **argv)
 		}
 	}
 	// MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	if(rang==0){
-		fprintf(stdout, "%d\n", n);
-		for (int i = 0; i < n; i++)
-			fprintf(stdout, "%a\n", x[i]);
-	}
 	/* Dump the solution vector */
 	if (rang==0) {
 		// x=x1;
