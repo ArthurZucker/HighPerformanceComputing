@@ -263,7 +263,7 @@ double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
 	//tester l'éfficacité
-	#pragma omp parallel for simd reduction(+:sum)
+	#pragma omp parallel for reduction(+:sum)
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
 		sum += x[i] * y[i];
 	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
@@ -304,7 +304,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	#pragma omp parallel for
+	#pragma omp parallel for 
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){
 		x[i] = 0.0;
 		r[i] = b[i];
@@ -329,7 +329,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double alpha = old_rz / dot(n, p, q);
 
 		//vectorisation peut être faite ici
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
 			r[i] -= alpha * q[i];
@@ -342,7 +342,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
 
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
