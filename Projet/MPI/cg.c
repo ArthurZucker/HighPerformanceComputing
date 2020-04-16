@@ -451,18 +451,38 @@ int main(int argc, char **argv)
 		}
 	}
 	// Sharing the resut
-	double *x1;
-	if (rang == 0) {
-		x1 = malloc(n*sizeof(double));
+	// double *x1;
+	// if (rang == 0) {
+	// 	x1 = malloc(n*sizeof(double));
+	// }
+	// else{
+	// 	x1 = x;
+	// }
+
+	if (rang != 0) {
+			MPI_Ssend(&x[rang*n/nbp],n/nbp, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
 	}
 	else{
-		x1 = x;
+		// Root doit écrire le tableau final, on recoit les blocs dans un ordre aléatoire
+		for (int i = 0; i < nbp-1; i++) {
+			double *temp = malloc(n/nbp*sizeof(double));
+			MPI_Recv(temp,n/nbp,MPI_DOUBLE,MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
+			int giver = status.MPI_SOURCE;
+			for (int ii = 0; ii < n/nbp; ii++) {
+				x[giver*n/nbp+ii] = temp[ii];
+			}
+			free(temp);
+		}
 	}
-	MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
+	// MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	if(rang==0){
+		fprintf(stdout, "%d\n", n);
+		for (int i = 0; i < n; i++)
+			fprintf(stdout, "%a\n", x[i]);
+	}
 	/* Dump the solution vector */
 	if (rang==0) {
-		x = x1;
+		// x=x1;
 		FILE *f_x = stdout;
 		if (solution_filename != NULL) {
 			f_x = fopen(solution_filename, "w");
