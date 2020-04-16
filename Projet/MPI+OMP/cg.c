@@ -195,9 +195,9 @@ struct csr_matrix_t *load_mm(FILE * f)
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
-			MPI_Send(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD);
+			MPI_Isend(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 		}
 	}
 	else{
@@ -482,7 +482,7 @@ int main(int argc, char **argv)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
-		#pragma omp parallel for 
+		#pragma omp parallel for
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
