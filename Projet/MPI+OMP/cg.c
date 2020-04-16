@@ -195,9 +195,9 @@ struct csr_matrix_t *load_mm(FILE * f)
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
-			MPI_Send(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD);
+			MPI_Isend(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 		}
 	}
 	else{
@@ -462,19 +462,26 @@ int main(int argc, char **argv)
 			fprintf(stderr, "[check] max error = %2.2e\n", norme);
 		}
 	}
-	// Sharing the resut
-	double *x1;
-	if (rang == 0) {
-		x1 = malloc(n*sizeof(double));
+
+	if (rang != 0) {
+			MPI_Ssend(&x[rang*n/nbp],n/nbp, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
 	}
 	else{
-		x1 = x;
+		// Root doit écrire le tableau final, on recoit les blocs dans un ordre aléatoire
+		for (int i = 0; i < nbp-1; i++) {
+			double *temp = malloc(n/nbp*sizeof(double));
+			MPI_Recv(temp,n/nbp,MPI_DOUBLE,MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
+			int giver = status.MPI_SOURCE;
+			for (int ii = 0; ii < n/nbp; ii++) {
+				x[giver*n/nbp+ii] = temp[ii];
+			}
+			free(temp);
+		}
 	}
-	MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
+	// MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	/* Dump the solution vector */
 	if (rang==0) {
-		x = x1;
+		// x=x1;
 		FILE *f_x = stdout;
 		if (solution_filename != NULL) {
 			f_x = fopen(solution_filename, "w");
@@ -482,10 +489,9 @@ int main(int argc, char **argv)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
-		#pragma omp parallel for 
+		#pragma omp parallel for
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
-	MPI_Finalize();
 	return EXIT_SUCCESS;
 }
