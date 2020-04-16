@@ -493,5 +493,6 @@ int main(int argc, char **argv)
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
+	MPI_Finalize();
 	return EXIT_SUCCESS;
 }
