@@ -2,7 +2,7 @@
 CC = mpicc
 
 # Add your choice of flags
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -O3 -Wall -Wextra -g
 LDLIBS = -lm
 
 all : cg
