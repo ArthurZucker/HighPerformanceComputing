@@ -244,9 +244,10 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Aj = A->Aj;
  	double *Ax = A->Ax;
 
-	#pragma omp parallel for schedule(guided) 
+	#pragma omp parallel for schedule(guided)
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 		y[i] = 0;
+		#pragma omp simd
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
@@ -303,7 +304,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	#pragma omp parallel for
+	#pragma omp parallel for 
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){
 		x[i] = 0.0;
 		r[i] = b[i];
@@ -328,7 +329,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double alpha = old_rz / dot(n, p, q);
 
 		//vectorisation peut être faite ici
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
 			r[i] -= alpha * q[i];
@@ -341,7 +342,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
 
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
@@ -462,26 +463,19 @@ int main(int argc, char **argv)
 			fprintf(stderr, "[check] max error = %2.2e\n", norme);
 		}
 	}
-
-	if (rang != 0) {
-			MPI_Ssend(&x[rang*n/nbp],n/nbp, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
+	// Sharing the resut
+	double *x1;
+	if (rang == 0) {
+		x1 = malloc(n*sizeof(double));
 	}
 	else{
-		// Root doit écrire le tableau final, on recoit les blocs dans un ordre aléatoire
-		for (int i = 0; i < nbp-1; i++) {
-			double *temp = malloc(n/nbp*sizeof(double));
-			MPI_Recv(temp,n/nbp,MPI_DOUBLE,MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
-			int giver = status.MPI_SOURCE;
-			for (int ii = 0; ii < n/nbp; ii++) {
-				x[giver*n/nbp+ii] = temp[ii];
-			}
-			free(temp);
-		}
+		x1 = x;
 	}
-	// MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
 	/* Dump the solution vector */
 	if (rang==0) {
-		// x=x1;
+		x = x1;
 		FILE *f_x = stdout;
 		if (solution_filename != NULL) {
 			f_x = fopen(solution_filename, "w");
