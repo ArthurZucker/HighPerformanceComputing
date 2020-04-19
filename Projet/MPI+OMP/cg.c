@@ -244,7 +244,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Aj = A->Aj;
  	double *Ax = A->Ax;
 
-	#pragma omp parallel for schedule(static,chunk)
+	#pragma omp parallel for schedule(guided) 
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
