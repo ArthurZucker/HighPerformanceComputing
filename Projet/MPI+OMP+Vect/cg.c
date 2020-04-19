@@ -195,9 +195,9 @@ struct csr_matrix_t *load_mm(FILE * f)
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
-			MPI_Send(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD);
+			MPI_Isend(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 		}
 	}
 	else{
@@ -247,6 +247,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	#pragma omp parallel for schedule(guided)
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
 		y[i] = 0;
+		#pragma omp simd
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
 			int j = Aj[u];
 			double A_ij = Ax[u];
@@ -303,7 +304,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	#pragma omp parallel for
+	#pragma omp parallel for 
 	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){
 		x[i] = 0.0;
 		r[i] = b[i];
@@ -328,7 +329,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double alpha = old_rz / dot(n, p, q);
 
 		//vectorisation peut être faite ici
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
 			r[i] -= alpha * q[i];
@@ -341,7 +342,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
 
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
@@ -482,7 +483,7 @@ int main(int argc, char **argv)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
-		#pragma omp parallel for 
+		#pragma omp parallel for
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
