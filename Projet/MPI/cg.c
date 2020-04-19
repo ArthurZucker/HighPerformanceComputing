@@ -200,24 +200,12 @@ struct csr_matrix_t *load_mm(FILE *f)
 	}
 
 	start = wtime();
-<<<<<<< HEAD
-		
-	if (rang == 0)
-	{
-		for (int i = 1; i < nbp; i++)
-		{
-			int u = i * n / nbp;
-			MPI_Send(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD);
-			MPI_Send(&Aj[Ap[u]], (Ap[(i + 1) * n / nbp] - Ap[u]), MPI_INT, i, 0, MPI_COMM_WORLD);
-			MPI_Send(&Ax[Ap[u]], (Ap[(i + 1) * n / nbp] - Ap[u]), MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
-=======
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
 			MPI_Isend(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD,&request);
 			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD,&request);
 			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
->>>>>>> f4f4599a66cf7b826fade990e1c71fc2ba0ff047
 		}
 	}
 	else
@@ -485,31 +473,6 @@ int main(int argc, char **argv)
 			fprintf(stderr, "[check] max error = %2.2e\n", norme);
 		}
 	}
-	// Sharing the resut
-<<<<<<< HEAD
-	double *x1;
-	if (rang == 0)
-	{
-		x1 = malloc(n * sizeof(double));
-	}
-	else
-	{
-		x1 = x;
-	}
-	MPI_Gather(x1, n / nbp, MPI_DOUBLE, x1, n / nbp, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-	/* Dump the solution vector */
-	if (rang == 0)
-	{
-		x = x1;
-=======
-	// double *x1;
-	// if (rang == 0) {
-	// 	x1 = malloc(n*sizeof(double));
-	// }
-	// else{
-	// 	x1 = x;
-	// }
 
 	if (rang != 0) {
 			MPI_Ssend(&x[rang*n/nbp],n/nbp, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
@@ -530,7 +493,6 @@ int main(int argc, char **argv)
 	/* Dump the solution vector */
 	if (rang==0) {
 		// x=x1;
->>>>>>> f4f4599a66cf7b826fade990e1c71fc2ba0ff047
 		FILE *f_x = stdout;
 		if (solution_filename != NULL)
 		{
