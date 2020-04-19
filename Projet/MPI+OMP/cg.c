@@ -310,13 +310,6 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		z[i] = r[i] / d[i];
 		p[i] = z[i];
 	}
-	// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- b - Ax == b
-	//
-	// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
-	//
-	// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z
-
-
 	double rz = dot(n, r, z);
 	double start = wtime();
 	double last_display = start;
@@ -328,7 +321,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double alpha = old_rz / dot(n, p, q);
 
 		//vectorisation peut être faite ici
-		#pragma omp parallel for
+		#pragma omp parallel for 
 		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
 			r[i] -= alpha * q[i];
