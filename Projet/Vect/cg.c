@@ -26,7 +26,7 @@
 #include <math.h>
 #include <getopt.h>
 #include <sys/time.h>
-
+#include <immintrin.h>
 #include "mmio.h"
 
 #define THRESHOLD 1e-8		// maximum tolerance threshold
@@ -203,6 +203,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
+	//_mm256_fmadd_pd;
 	for (int i = 0; i < n; i++) {
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
