@@ -198,22 +198,27 @@ struct csr_matrix_t *load_mm(FILE *f)
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
-	int u1 = rang*n/nbp;
-	MPI_Scatter(&Ap[u1],(n/nbp)+2, MPI_INT,&Ap[u1],(n/nbp)+2, MPI_INT,0,MPI_COMM_WORLD);
-	int *displs = (int *)calloc(nbp,sizeof(int));
-	int *scounts = (int *)calloc(nbp,sizeof(int));
-	if (rang==0) {
-		for (int i = 1; i < nbp; i++) {
-			int u = i*n/nbp;
-			displs[i] = (Ap[(i+1)*n/nbp]-Ap[u]);
-			scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]);
-			fprintf(stderr,"%d\n", scounts[i]);
-		}
-	}
-
-	fprintf(stderr,"%d : %d\n",rang,(Ap[(rang+1)*n/nbp]-Ap[u1]));
-	MPI_Scatterv(&Aj[Ap[u1]],scounts,displs,MPI_INT,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT,0,MPI_COMM_WORLD);
-
+	// int u1 = rang*n/nbp;
+	// MPI_Scatter(&Ap[u1],(n/nbp)+2, MPI_INT,&Ap[u1],(n/nbp)+2, MPI_INT,0,MPI_COMM_WORLD);
+	// int *displs = (int *)calloc(nbp,sizeof(int));
+	// int *scounts = (int *)calloc(nbp,sizeof(int));
+	// if (rang==0) {
+	// 	for (int i = 1; i < nbp; i++) {
+	// 		int u = i*n/nbp;
+	// 		displs[i] = (Ap[(i+1)*n/nbp]-Ap[u]);
+	// 		scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]);
+	// 		fprintf(stderr,"%d\n", scounts[i]);
+	// 	}
+	// }
+	// if (rang==1) {
+	// 	for (int i = u1; i < (rang+1)*n/nbp; i++) {
+	// 		fprintf(stderr, "Ap[%d]=%d\n",i,Ap[i]);
+	// 	}
+	//
+	// }
+	// fprintf(stderr,"%d : %d\n",rang,(Ap[(rang+1)*n/nbp]-Ap[u1]));
+	// MPI_Scatterv(&Aj[Ap[u1]],scounts,displs,MPI_INT,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Scatterv(&Ax[Ap[u1]],scounts,displs,MPI_INT,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT,0,MPI_COMM_WORLD);
 
 	start = wtime();
 	if (rang==0) {
