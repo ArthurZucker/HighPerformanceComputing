@@ -210,7 +210,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 			int u = i*n/nbp;
 			displs[i] = (Ap[(i+1)*n/nbp]-Ap[u]);
 			if(i>0)
-				scounts[i] = scounts[i-1]+displs[i];
+				scounts[i] = scounts[i-1]+displs[i-1];
 			fprintf(stderr,"%d\n", scounts[i]);
 		}
 	}
