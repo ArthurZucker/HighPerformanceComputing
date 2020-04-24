@@ -200,8 +200,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 	}
 
 	int u1 = rang*n/nbp;
-	MPI_Scatter(&Ap[u1],(n/nbp)+1, MPI_INT,&Ap[u1+1],(n/nbp)+1, MPI_INT,0,MPI_COMM_WORLD);
-
+	MPI_Scatter(&Ap[u1],(n/nbp), MPI_INT,&Ap[u1],(n/nbp), MPI_INT,0,MPI_COMM_WORLD);
 
 	int *displs = (int *)calloc(nbp,sizeof(int));
 	int *scounts = (int *)calloc(nbp,sizeof(int));
