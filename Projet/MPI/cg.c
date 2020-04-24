@@ -33,7 +33,6 @@ int rang, nbp;
 MPI_Status status;
 MPI_Request request;
 
-int cpt_n=0;
 
 #define THRESHOLD 1e-8 // maximum tolerance threshold
 
@@ -208,28 +207,28 @@ struct csr_matrix_t *load_mm(FILE *f)
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
+	start = wtime();
+	int u1 = rang*n/nbp;
+	int *displs = (int *)malloc(nbp*sizeof(int));
+	int *scounts = (int *)malloc(nbp*sizeof(int));
+	displs[0]=0;
+	for (int i = 0; i < nbp; i++) {
+		scounts[i] = n/nbp +2; //combien d'infos j'envoie
+		if(i>0)
+			displs[i] = displs[i-1]+scounts[i-1]-2;//pointeur sur où écrire
+	}
+	MPI_Scatterv(&Ap[u1],scounts,displs,MPI_INT,&Ap[u1],2+n/nbp,MPI_INT,0,MPI_COMM_WORLD);
 
-	// int u1 = rang*n/nbp;
-	// int *displs = (int *)malloc(nbp*sizeof(int));
-	// int *scounts = (int *)malloc(nbp*sizeof(int));
-	// displs[0]=0;
-	// for (int i = 0; i < nbp; i++) {
-	// 	scounts[i] = n/nbp +1; //combien d'infos j'envoie
-	// 	if(i>0)
-	// 		displs[i] = displs[i-1]+scounts[i-1]-1;//pointeur sur où écrire
-	// }
-	// MPI_Scatterv(&Ap[u1],scounts,displs,MPI_INT,&Ap[u1],1+n/nbp,MPI_INT,0,MPI_COMM_WORLD);
+	displs[0]=0;
+	for (int i = 0; i < nbp; i++) {
+		int u = i*n/nbp;
+		scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]); //combien d'infos j'envoie
+		if(i>0)
+			displs[i] = displs[i-1]+scounts[i-1];//pointeur sur où écrire
+	}
 
-	// displs[0]=0;
-	// for (int i = 0; i < nbp; i++) {
-	// 	int u = i*n/nbp;
-	// 	scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]); //combien d'infos j'envoie
-	// 	if(i>0)
-	// 		displs[i] = displs[i-1]+scounts[i-1];//pointeur sur où écrire
-	// }
-
-	// MPI_Scatterv(&Aj[u1],scounts,displs,MPI_INT		,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT		,0,MPI_COMM_WORLD);
-	// MPI_Scatterv(&Ax[u1],scounts,displs,MPI_DOUBLE	,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE	,0,MPI_COMM_WORLD);
+	MPI_Scatterv(&Aj[u1],scounts,displs,MPI_INT		,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT		,0,MPI_COMM_WORLD);
+	MPI_Scatterv(&Ax[u1],scounts,displs,MPI_DOUBLE	,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE	,0,MPI_COMM_WORLD);
 	//
 	// // if(rang==1){
 	// // 	fprintf(stderr, "%d : Ax[dernier] = %f\n",rang,Ax[(Ap[(rang+1)*n/nbp])] );
@@ -251,20 +250,21 @@ struct csr_matrix_t *load_mm(FILE *f)
 	// 	// 		}
 	// 	// }
 	// }
-	start = wtime();
-	if (rang==0) {
-		for (int i = 1; i < nbp; i++) {
-			int u = i*n/nbp;
-			MPI_Isend(&Ap[u]		, (n/nbp)+2							 ,MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-	}
-	else{
-		int u = rang * n / nbp;
-		MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
-		MPI_Recv(&Aj[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_INT		, 0, 0, MPI_COMM_WORLD, &status);
-		MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE	, 0, 0, MPI_COMM_WORLD, &status);
-	}
+
+	// if (rang==0) {
+	// 	for (int i = 1; i < nbp; i++) {
+	// 		int u = i*n/nbp;
+	// 		//MPI_Isend(&Ap[u]		, (n/nbp)+2							 ,MPI_INT		,i,0,MPI_COMM_WORLD,&request);
+	// 		//MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT		,i,0,MPI_COMM_WORLD,&request);
+	// 		//MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+	// 	}
+	// }
+	// else{
+	// 	int u = rang * n / nbp;
+	// 	//MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
+	// 	//MPI_Recv(&Aj[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_INT		, 0, 0, MPI_COMM_WORLD, &status);
+	// 	//MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE	, 0, 0, MPI_COMM_WORLD, &status);
+	// }
 	stop = wtime();
 	if (rang == 0)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
