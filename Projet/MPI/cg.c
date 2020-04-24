@@ -255,24 +255,9 @@ struct csr_matrix_t *load_mm(FILE *f)
 	if (rang==0) {
 		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
-			if (i == nbp-1 && n%nbp!=0) {
-				MPI_Isend(&Ap[u]		, (n/nbp)+2							 ,MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-				MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-				MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-			}
-			else{
-				MPI_Isend(&Ap[u]		, (n/nbp)+2							 ,MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-				MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-				MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-			}
-		}
-	}
-	else if(rang==nbp-1 && n%nbp!=0)
-	{
-		int u = rang * n / nbp;
-		MPI_Recv(&Ap[u], (n/nbp)+2											 , MPI_INT		, 0, 0, MPI_COMM_WORLD, &status);
-		MPI_Recv(&Aj[Ap[u]], (Ap[((rang+1)*n)/nbp] - Ap[u]), MPI_INT		, 0, 0, MPI_COMM_WORLD, &status);
-		MPI_Recv(&Ax[Ap[u]], (Ap[((rang+1)*n)/nbp] - Ap[u]), MPI_DOUBLE	, 0, 0, MPI_COMM_WORLD, &status);
+			MPI_Isend(&Ap[u]		, (n/nbp)+2							 ,MPI_INT		,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT		,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 	}
 	else{
 		int u = rang * n / nbp;
