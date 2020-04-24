@@ -33,6 +33,8 @@ int rang, nbp;
 MPI_Status status;
 MPI_Request request;
 
+int cpt_n=0;
+
 #define THRESHOLD 1e-8 // maximum tolerance threshold
 
 struct csr_matrix_t
@@ -129,6 +131,15 @@ struct csr_matrix_t *load_mm(FILE *f)
 		start = wtime();
 	}
 	/* -------- STEP 2: Convert to CSR (compressed sparse row) representation ----- */
+	if (rang==0) {
+		fprintf(stderr, "original n:%d\n",n );
+		while(n%nbp!=0){
+			cpt_n++;
+			n++;
+		}
+		fprintf(stderr, "modified n:%d\n",n );
+	}
+
 	double start2 = wtime();
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&nnz, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -200,52 +211,72 @@ struct csr_matrix_t *load_mm(FILE *f)
 	}
 
 	int u1 = rang*n/nbp;
-	MPI_Scatter(&Ap[u1],(n/nbp), MPI_INT,&Ap[u1],(n/nbp), MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Scatter(&Ap[u1-2],(n/nbp)+2, MPI_INT,&Ap[u1],(n/nbp)+2, MPI_INT,0,MPI_COMM_WORLD);
 
-	int *displs = (int *)calloc(nbp,sizeof(int));
-	int *scounts = (int *)calloc(nbp,sizeof(int));
+	if(rang==1){
+		fprintf(stderr, "%d : Ap[%6d] = %6d\t",rang,rang*n/nbp -1,Ap[(rang* n/nbp)-1] );
+		fprintf(stderr, "%d : Ap[%6d] = %6d\t",rang,rang*n/nbp,Ap[(rang* n/nbp)] );
+		fprintf(stderr, "%d : Ap[%6d] = %6d\t",rang,(rang+1)*n/nbp,Ap[(rang+1)* n/nbp] );
+		fprintf(stderr, "%d : Ap[%6d] = %6d\n",rang,(rang+1)*n/nbp-1,Ap[(rang+1)* n/nbp -1] );
+	}
+	else{
+		fprintf(stderr, "%d : Ap[%6d] = %6d\t",rang,n/nbp -1,Ap[(n/nbp)-1] );
+		fprintf(stderr, "%d : Ap[%6d] = %6d\t",rang,n/nbp,Ap[(n/nbp)] );
+		fprintf(stderr, "%d : Ap[%6d] = %6d\t",rang,n,Ap[(n)] );
+		fprintf(stderr, "%d : Ap[%6d] = %6d\n",rang,n-1,Ap[(n-1)] );
+	}
+
+	// int *displs = (int *)malloc(nbp*sizeof(int));
+	// int *scounts = (int *)malloc(nbp*sizeof(int));
+	// displs[0]=0;
+	// for (int i = 0; i < nbp; i++) {
+	// 	int u = i*n/nbp;
+	// 	scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]); //combien d'infos j'envoie
+	// 	if(i>0)
+	// 		displs[i] = displs[i-1]+scounts[i-1];//pointeur sur où écrire
+	// }
+	// MPI_Scatterv(&Aj[u1],scounts,displs,MPI_INT		,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT		,0,MPI_COMM_WORLD);
+	// MPI_Scatterv(&Ax[u1],scounts,displs,MPI_DOUBLE	,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE	,0,MPI_COMM_WORLD);
+	//
+	// // if(rang==1){
+	// // 	fprintf(stderr, "%d : Ax[dernier] = %f\n",rang,Ax[(Ap[(rang+1)*n/nbp])] );
+	// // 	fprintf(stderr, "%d : Aj[dernier] = %d\n",rang,Aj[(Ap[(rang+1)*n/nbp])] );
+	// // }
+	// if(rang==1){
+	// 	for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
+	// 	{
+	// 		for (int u = Ap[i]; u < Ap[i + 1]; u++){
+	// 			//if (Aj[u] != 0)
+	// 				fprintf(stderr, "%d : Ax[%d] = %f\n",rang,u,Ax[u] );
+	// 			}
+	// 	}
+	// 	// for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
+	// 	// {
+	// 	// 	for (int u = Ap[i]; u < Ap[i + 1]; u++){
+	// 	// 		// if (Aj[u] != 0)
+	// 	// 			fprintf(stderr, "%d : Aj[%d] = %d\n",rang,u,Aj[u] );
+	// 	// 		}
+	// 	// }
+	// }
+	start = wtime();
 	if (rang==0) {
-		for (int i = 0; i < nbp; i++) {
+		for (int i = 1; i < nbp; i++) {
 			int u = i*n/nbp;
-			scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]); //combien d'infos j'envoie
-			if(i>0)
-				displs[i] = displs[i-1]+scounts[i-1];//pointeur sur où écrire
+			//MPI_Isend(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD,&request);
+			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
 		}
 	}
-	MPI_Scatterv(Aj,scounts,displs,MPI_INT		,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT		,0,MPI_COMM_WORLD);
-	MPI_Scatterv(Ax,scounts,displs,MPI_DOUBLE	,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE	,0,MPI_COMM_WORLD);
-
-	for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
+	else
 	{
-		for (int u = Ap[i]; u < Ap[i + 1]; u++)
-			if (Aj[u] != 0)
-				fprintf(stderr, "%d : Ax[%d] = %f\n",rang,u,Ax[u] );
+		int u = rang * n / nbp;
+		//MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		MPI_Recv(&Aj[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
 	}
-	for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
-	{
-		for (int u = Ap[i]; u < Ap[i + 1]; u++)
-			if (Aj[u] != 0)
-				fprintf(stderr, "%d : Aj[%d] = %d\n",rang,u,Aj[u] );
-	}
-	// start = wtime();
-	// if (rang==0) {
-	// 	for (int i = 1; i < nbp; i++) {
-	// 		int u = i*n/nbp;
-	// 		MPI_Isend(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD,&request);
-	// 		MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD,&request);
-	// 		MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-	// 	}
-	// }
-	// else
-	// {
-	// 	int u = rang * n / nbp;
-	// 	MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
-	// 	MPI_Recv(&Aj[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
-	// 	MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
-	// }
-	// stop = wtime();
-	// if (rang == 0)
-	// 	fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
+	stop = wtime();
+	if (rang == 0)
+		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
 	A->nz = Ap[(rang + 1) * n / nbp] - Ap[rang * n / nbp];
@@ -371,9 +402,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		MPI_Allgatherv(&p[rang*n/nbp],n/nbp, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
+		fprintf(stderr, "%f\t", alpha);
 		for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
 		{ // x <-- x + alpha*p
 			x[i] += alpha * p[i];
+
 			r[i] -= alpha * q[i];
 			z[i] = r[i] / d[i];
 		}
