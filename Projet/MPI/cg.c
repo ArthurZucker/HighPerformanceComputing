@@ -229,27 +229,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 
 	MPI_Scatterv(&Aj[u1],scounts,displs,MPI_INT		,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT		,0,MPI_COMM_WORLD);
 	MPI_Scatterv(&Ax[u1],scounts,displs,MPI_DOUBLE	,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE	,0,MPI_COMM_WORLD);
-	//
-	// // if(rang==1){
-	// // 	fprintf(stderr, "%d : Ax[dernier] = %f\n",rang,Ax[(Ap[(rang+1)*n/nbp])] );
-	// // 	fprintf(stderr, "%d : Aj[dernier] = %d\n",rang,Aj[(Ap[(rang+1)*n/nbp])] );
-	// // }
-	// if(rang==1){
-	// 	for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
-	// 	{
-	// 		for (int u = Ap[i]; u < Ap[i + 1]; u++){
-	// 			//if (Aj[u] != 0)
-	// 				fprintf(stderr, "%d : Ax[%d] = %f\n",rang,u,Ax[u] );
-	// 			}
-	// 	}
-	// 	// for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
-	// 	// {
-	// 	// 	for (int u = Ap[i]; u < Ap[i + 1]; u++){
-	// 	// 		// if (Aj[u] != 0)
-	// 	// 			fprintf(stderr, "%d : Aj[%d] = %d\n",rang,u,Aj[u] );
-	// 	// 		}
-	// 	// }
-	// }
 
 	// if (rang==0) {
 	// 	for (int i = 1; i < nbp; i++) {
@@ -381,14 +360,14 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	for (int i = 0; i < nbp; i++) {
 		int u = i*n/nbp;
 		displs[i] = u;
-		rcounts[i] = n/nbp + 1*(i==nbp-1 && n%nbp!=0);
+		rcounts[i] = n/nbp + (n%nbp)*(i==nbp-1 && n%nbp!=0);
 	}
 	while (norm(n, r) > epsilon)
 	{
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
-		MPI_Allgatherv(&p[rang*n/nbp],n/nbp + 1*(rang==nbp-1 && n%nbp!=0), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+		MPI_Allgatherv(&p[rang*n/nbp],n/nbp + (n%nbp)*(rang==nbp-1 && n%nbp!=0), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 		for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++)
@@ -522,12 +501,12 @@ int main(int argc, char **argv)
 	for (int i = 0; i < nbp; i++) {
 		int u = i*n/nbp;
 		displs[i] = u;
-		rcounts[i] = n/nbp + 1*(i==nbp-1 && n%nbp!=0);
+		rcounts[i] = n/nbp + (n%nbp)*(i==nbp-1 && n%nbp!=0);
 	}
 	/* Check result */
 	if (safety_check)
 	{
-		MPI_Allgatherv(&x[rang*n/nbp],n/nbp + 1*(rang==nbp-1 && n%nbp!=0), MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+		MPI_Allgatherv(&x[rang*n/nbp],n/nbp + (n%nbp)*(rang==nbp-1 && n%nbp!=0), MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		double *y = scratch;
 		sp_gemv(A, x, y);											// y = Ax
 		for (int i = rang * n / nbp; i < (rang + 1) * n / nbp; i++) // y = Ax - b
