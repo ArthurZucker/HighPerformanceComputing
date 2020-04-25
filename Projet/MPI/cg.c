@@ -213,22 +213,29 @@ struct csr_matrix_t *load_mm(FILE *f)
 	int *scounts = (int *)malloc(nbp*sizeof(int));
 	displs[0]=0;
 	for (int i = 0; i < nbp; i++) {
-		scounts[i] = n/nbp +2; //combien d'infos j'envoie
-		if(i>0)
-			displs[i] = displs[i-1]+scounts[i-1]-2;//pointeur sur où écrire
+					scounts[i] = (n/nbp)+ 1 + (n%nbp)*(i==nbp-1); //combien d'infos j'envoie
+					displs[i]  = i*(n/nbp);//pointeur sur où écrire
 	}
-	MPI_Scatterv(&Ap[u1],scounts,displs,MPI_INT,&Ap[u1],2+n/nbp,MPI_INT,0,MPI_COMM_WORLD);
+
+	fprintf(stderr,"%d \n",n%nbp*(rang==nbp-1));
+	MPI_Scatterv(Ap,scounts,displs,MPI_INT,&Ap[u1],(n%nbp)*(rang==nbp-1)+1+n/nbp,MPI_INT,0,MPI_COMM_WORLD);
+	fprintf(stderr,"%d : Ap \n",rang);
+
+	if(rang==nbp-2)
+					for(int i=rang*n/nbp;i<(rang+1)*n/nbp;i++)
+									fprintf(stderr,"Ap[%d]=%d \n",i,Ap[i]);
 
 	displs[0]=0;
 	for (int i = 0; i < nbp; i++) {
-		int u = i*n/nbp;
-		scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]); //combien d'infos j'envoie
-		if(i>0)
-			displs[i] = displs[i-1]+scounts[i-1];//pointeur sur où écrire
+					int u = i*n/nbp;
+					scounts[i] = (Ap[(i+1)*n/nbp]-Ap[u]); //combien d'infos j'envoie
+					if(i>0)
+									displs[i] = displs[i-1]+scounts[i-1];//pointeur sur où écrire
 	}
 
-	MPI_Scatterv(&Aj[u1],scounts,displs,MPI_INT		,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT		,0,MPI_COMM_WORLD);
-	MPI_Scatterv(&Ax[u1],scounts,displs,MPI_DOUBLE	,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE	,0,MPI_COMM_WORLD);
+	MPI_Scatterv(&Aj[u1],scounts,displs,MPI_INT     ,&Aj[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_INT         ,0,MPI_COMM_WORLD);
+	fprintf(stderr,"%d : Aj \n",rang);
+	MPI_Scatterv(&Ax[u1],scounts,displs,MPI_DOUBLE  ,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE     ,0,MPI_COMM_WORLD);
 
 	// if (rang==0) {
 	// 	for (int i = 1; i < nbp; i++) {
