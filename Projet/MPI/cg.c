@@ -244,6 +244,14 @@ struct csr_matrix_t *load_mm(FILE *f)
 	// 	MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
 	// }
 
+	/*VERSION BROADCAST*/
+	// MPI_Bcast(Ap,n + 1,MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	// if(rang==nbp-1)
+	// 				for(int i=rang*n/nbp;i<(rang+1)*n/nbp+1;i++)
+	// 								fprintf(stderr,"Ap[%d]=%d \n",i,Ap[i]);
 	stop = wtime();
 
 	if (rang == 0)
