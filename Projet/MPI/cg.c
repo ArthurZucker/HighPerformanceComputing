@@ -202,6 +202,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 	start = wtime();
 	/* VERSION SCATTERV*/
 	int u1 = rang * (n / nbp);
+	fprintf(stderr,"%d : u1=%d \n",rang,u1);
 	int *displs  = (int *)malloc(nbp * sizeof(int));
 	int *scounts = (int *)malloc(nbp * sizeof(int));
 	displs[0] = 0;
@@ -217,13 +218,15 @@ struct csr_matrix_t *load_mm(FILE *f)
 	for (int i = 0; i < nbp; i++)
 	{
 		int u = i * (n / nbp);
+		fprintf(stderr,"%d : u=%d \n",rang,u);
 		int uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
+		fprintf(stderr,"%d : uu=%d \n",rang,uu);
 		scounts[i] = (Ap[uu] - Ap[u]); //combien d'infos j'envoie
 		if (i > 0)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
 	int u2 = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-	fprintf(stderr,"%d : u2=%d",rang,u2);
+	fprintf(stderr,"%d : u2=%d \n",rang,u2);
 
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -419,7 +422,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 				/* verbosity */
 
 				double rate = iter / (t - start); // iterations per s.
-				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
+				double GFLOPs = 1e-9 * rate * (2 * A->Ap[n] + 12 * n);
 				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
 				fflush(stdout);
 				last_display = t;
