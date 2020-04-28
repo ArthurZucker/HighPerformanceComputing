@@ -231,13 +231,13 @@ struct csr_matrix_t *load_mm(FILE *f)
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-	if (rang==nbp-1)
-	{
-		for (int i = Ap[u1]; i < Ap[u2]; i++)
-		{
-			fprintf(stderr,"Aj[%d]=%d \n",i,Aj[i]);
-		}
-	}
+	// if (rang==nbp-1)
+	// {
+	// 	for (int i = Ap[u1]; i < Ap[u2]; i++)
+	// 	{
+	// 		fprintf(stderr,"Ax[%d]=%f \n",i,Ax[i]);
+	// 	}
+	// }
 
 
 
@@ -398,6 +398,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		MPI_Allgatherv(&p[rang * (n / nbp)], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
+
 		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
 		{
 			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
