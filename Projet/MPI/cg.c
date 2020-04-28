@@ -227,19 +227,19 @@ struct csr_matrix_t *load_mm(FILE *f)
 
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	
-	if (rang==nbp-1)
-	{
-		for (int i = Ap[u1]; i < Ap[u2]; i++)
-		{
-			fprintf(stderr,"Aj[%d]=%d",i,Aj[i]);
-		}
-	}
-	
-	
-	
-	
-	
+
+	// if (rang==nbp-1)
+	// {
+	// 	for (int i = Ap[u1]; i < Ap[u2]; i++)
+	// 	{
+	// 		fprintf(stderr,"Aj[%d]=%d",i,Aj[i]);
+	// 	}
+	// }
+
+
+
+
+
 	/* VERSION ISEND / RECV*/
 	// if (rang == 0)
 	// {
