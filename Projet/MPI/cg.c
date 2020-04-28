@@ -223,19 +223,9 @@ struct csr_matrix_t *load_mm(FILE *f)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
 	int u2 = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-	fprintf(stderr,"%d : u2=%d",rang,u2);
-
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	
-	if (rang==nbp-1)
-	{
-		for (int i = Ap[u1]; i < Ap[u2]; i++)
-		{
-			fprintf(stderr,"Aj[%d]=%d",i,Aj[i]);
-		}
-	}
-	
+
 	
 	
 	
@@ -396,16 +386,12 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
-		{ // x <-- x + alpha*p
-			x[i] += alpha * p[i];
-			r[i] -= alpha * q[i];
-			z[i] = r[i] / d[i];
-		}
-		// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- r - alpha*q
-		//
-		// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
-		//
-		rz = dot(n, r, z); // restore invariant
+		{ 
+			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
+			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
+			z[i] = r[i] / d[i];	 	// z <-- M^(-1).r
+		}	
+		rz = dot(n, r, z); 			// restore invariant
 		double beta = rz / old_rz;
 		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++) // p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
@@ -417,8 +403,8 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			if (t - last_display > 0.5)
 			{
 				/* verbosity */
-
 				double rate = iter / (t - start); // iterations per s.
+				int nz = A->Ap[n];
 				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
 				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
 				fflush(stdout);
