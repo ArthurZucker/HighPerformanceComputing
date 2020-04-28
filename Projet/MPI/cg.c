@@ -211,16 +211,30 @@ struct csr_matrix_t *load_mm(FILE *f)
 	int u1 = rang*n/nbp;
 	int *displs = (int *)malloc(nbp*sizeof(int));
 	int *scounts = (int *)malloc(nbp*sizeof(int));
-	displs[0]=0;
-	for (int i = 0; i < nbp; i++) {
-					scounts[i] = (n/nbp)+ 1 + (n%nbp)*(i==nbp-1); //combien d'infos j'envoie
-					displs[i]  = i*(n/nbp);//pointeur sur où écrire
+	// displs[0]=0;
+	// for (int i = 0; i < nbp; i++) {
+	// 				scounts[i] = (n/nbp)+ 2 + (n%nbp)*(i==nbp-1); //combien d'infos j'envoie
+	// 				displs[i]  = i*(n/nbp);//pointeur sur où écrire
+	// }
+	//
+	// fprintf(stderr,"%d \n",n%nbp*(rang==nbp-1));
+	// MPI_Scatterv(Ap,scounts,displs,MPI_INT,&Ap[u1],(n%nbp)*(rang==nbp-1)+2+n/nbp,MPI_INT,0,MPI_COMM_WORLD);
+	// fprintf(stderr,"%d : Ap \n",rang);
+
+	if (rang==0) {
+		for (int i = 1; i < nbp; i++) {
+			int u = i*n/nbp;
+			MPI_Isend(&Ap[u]		, (n/nbp)+2+(n%nbp)*(rang==nbp-1)	,MPI_INT		,i,0,MPI_COMM_WORLD,&request);
+			// MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT		,i,0,MPI_COMM_WORLD,&request);
+			// MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
+		}
 	}
-
-	fprintf(stderr,"%d \n",n%nbp*(rang==nbp-1));
-	MPI_Scatterv(Ap,scounts,displs,MPI_INT,&Ap[u1],(n%nbp)*(rang==nbp-1)+1+n/nbp,MPI_INT,0,MPI_COMM_WORLD);
-	fprintf(stderr,"%d : Ap \n",rang);
-
+	else{
+		int u = rang * n / nbp;
+		MPI_Recv(&Ap[u],(n/nbp)+2+(n%nbp)*(rang==nbp-1),MPI_INT,0,0,MPI_COMM_WORLD,&status);
+		// MPI_Recv(&Aj[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_INT		, 0, 0, MPI_COMM_WORLD, &status);
+		// MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE	, 0, 0, MPI_COMM_WORLD, &status);
+	}
 	if(rang==nbp-2)
 					for(int i=rang*n/nbp;i<(rang+1)*n/nbp;i++)
 									fprintf(stderr,"Ap[%d]=%d \n",i,Ap[i]);
@@ -237,20 +251,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 	fprintf(stderr,"%d : Aj \n",rang);
 	MPI_Scatterv(&Ax[u1],scounts,displs,MPI_DOUBLE  ,&Ax[Ap[u1]],(Ap[(rang+1)*n/nbp]-Ap[u1]),MPI_DOUBLE     ,0,MPI_COMM_WORLD);
 
-	// if (rang==0) {
-	// 	for (int i = 1; i < nbp; i++) {
-	// 		int u = i*n/nbp;
-	// 		//MPI_Isend(&Ap[u]		, (n/nbp)+2							 ,MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-	// 		//MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT		,i,0,MPI_COMM_WORLD,&request);
-	// 		//MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-	// 	}
-	// }
-	// else{
-	// 	int u = rang * n / nbp;
-	// 	//MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
-	// 	//MPI_Recv(&Aj[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_INT		, 0, 0, MPI_COMM_WORLD, &status);
-	// 	//MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE	, 0, 0, MPI_COMM_WORLD, &status);
-	// }
 	stop = wtime();
 	if (rang == 0)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
