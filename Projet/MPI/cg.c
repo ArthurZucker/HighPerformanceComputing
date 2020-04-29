@@ -205,11 +205,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 	start = wtime();
 	/* VERSION SCATTERV*/
 	int u1 = rang * (n / nbp);
-<<<<<<< HEAD
 	
-=======
-	fprintf(stderr,"%d : u1=%d \n",rang,u1);
->>>>>>> 1eeaa96c87859fe099c0e4cb5b2d7640c2ef04b9
 	int *displs  = (int *)malloc(nbp * sizeof(int));
 	int *scounts = (int *)malloc(nbp * sizeof(int));
 	displs[0] = 0;
