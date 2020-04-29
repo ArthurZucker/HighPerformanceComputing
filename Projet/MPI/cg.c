@@ -36,6 +36,8 @@ MPI_Request request;
 int *displs;
 int *rcounts ;
 
+int binf;
+int bsup;
 #define THRESHOLD 1e-8 // maximum tolerance threshold
 
 struct csr_matrix_t
@@ -203,9 +205,11 @@ struct csr_matrix_t *load_mm(FILE *f)
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
 	start = wtime();
+
+	binf = rang * (n / nbp);
+	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
+
 	/* VERSION SCATTERV*/
-	int u1 = rang * (n / nbp);
-	
 	int *displs  = (int *)malloc(nbp * sizeof(int));
 	int *scounts = (int *)malloc(nbp * sizeof(int));
 	displs[0] = 0;
@@ -216,8 +220,8 @@ struct csr_matrix_t *load_mm(FILE *f)
 	}
 	if (rang == 0)
 		fprintf(stderr, "\n%d : reste = %d \n", rang,n % nbp);
-	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[u1], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[u1], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
+	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
 	displs[0] = 0;
 	for (int i = 0; i < nbp; i++)
 	{
@@ -227,15 +231,14 @@ struct csr_matrix_t *load_mm(FILE *f)
 		if (i > 0)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
-	int u2 = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
-	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
+	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	// if (rang==nbp-1)
 	// {
-	// 	for (int i = Ap[u1]; i < Ap[u2]; i++)
+	// 	for (int i = Ap[binf]; i < Ap[bsup]; i++)
 	// 	{
 	// 		fprintf(stderr,"Ax[%d]=%f \n",i,Ax[i]);
 	// 	}
@@ -278,7 +281,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
-	A->nz = Ap[u2] - Ap[rang * (n / nbp)];
+	A->nz = Ap[bsup] - Ap[binf];
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
@@ -294,7 +297,7 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-	for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
+	for (int i = binf; i < bsup; i++)
 	{
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
@@ -314,7 +317,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
 
-	for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
+	for (int i = binf; i < bsup; i++)
 	{
 		y[i] = 0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
@@ -332,7 +335,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
-	for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
+	for (int i = binf; i < bsup; i++)
 		sum += x[i] * y[i];
 	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	return sum;
@@ -372,14 +375,14 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
+	for (int i = binf; i < bsup; i++)
 	{
 		x[i] = 0.0;
 		r[i] = b[i];
 		z[i] = r[i] / d[i];
 		p[i] = z[i];
 	}
-	
+
 
 	double rz = dot(n, r, z);
 	double start = wtime();
@@ -391,12 +394,12 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
-		//MPI_Allgatherv(&p[rang * (n / nbp)], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 
-		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
+		for (int i = binf; i < bsup; i++)
 		{
 			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
 			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
@@ -404,7 +407,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		}
 		rz = dot(n, r, z); 			// restore invariant
 		double beta = rz / old_rz;
-		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++) // p <-- z + beta*p
+		for (int i = binf; i < bsup; i++) // p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
 		norme = norm(n, r);
@@ -512,7 +515,7 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++){
+		for (int i = binf; i < bsup; i++){
 			b[i] = PRF(i, seed);
 		}
 	}
@@ -532,7 +535,7 @@ int main(int argc, char **argv)
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		double *y = scratch;
 		sp_gemv(A, x, y);											  // y = Ax
-		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++) // y = Ax - b
+		for (int i = binf; i < bsup; i++) // y = Ax - b
 			y[i] -= b[i];
 		double norme = norm(n, y);
 		if (rang == 0)
