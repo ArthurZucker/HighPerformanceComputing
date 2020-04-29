@@ -205,7 +205,11 @@ struct csr_matrix_t *load_mm(FILE *f)
 	start = wtime();
 	/* VERSION SCATTERV*/
 	int u1 = rang * (n / nbp);
+<<<<<<< HEAD
 	
+=======
+	fprintf(stderr,"%d : u1=%d \n",rang,u1);
+>>>>>>> 1eeaa96c87859fe099c0e4cb5b2d7640c2ef04b9
 	int *displs  = (int *)malloc(nbp * sizeof(int));
 	int *scounts = (int *)malloc(nbp * sizeof(int));
 	displs[0] = 0;
@@ -222,12 +226,16 @@ struct csr_matrix_t *load_mm(FILE *f)
 	for (int i = 0; i < nbp; i++)
 	{
 		int u = i * (n / nbp);
+		fprintf(stderr,"%d : u=%d \n",rang,u);
 		int uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
+		fprintf(stderr,"%d : uu=%d \n",rang,uu);
 		scounts[i] = (Ap[uu] - Ap[u]); //combien d'infos j'envoie
 		if (i > 0)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
 	int u2 = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
+	fprintf(stderr,"%d : u2=%d \n",rang,u2);
+
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
@@ -237,7 +245,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 	// {
 	// 	for (int i = Ap[u1]; i < Ap[u2]; i++)
 	// 	{
-	// 		fprintf(stderr,"Aj[%d]=%d",i,Aj[i]);
+	// 		fprintf(stderr,"Ax[%d]=%f \n",i,Ax[i]);
 	// 	}
 	// }
 
@@ -395,12 +403,13 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
+
 		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++)
-		{ 
+		{
 			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
 			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
 			z[i] = r[i] / d[i];	 	// z <-- M^(-1).r
-		}	
+		}
 		rz = dot(n, r, z); 			// restore invariant
 		double beta = rz / old_rz;
 		for (int i = rang * (n / nbp); i < ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1); i++) // p <-- z + beta*p
