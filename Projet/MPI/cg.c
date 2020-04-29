@@ -222,16 +222,12 @@ struct csr_matrix_t *load_mm(FILE *f)
 	for (int i = 0; i < nbp; i++)
 	{
 		int u = i * (n / nbp);
-		fprintf(stderr,"%d : u=%d \n",rang,u);
 		int uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
-		fprintf(stderr,"%d : uu=%d \n",rang,uu);
 		scounts[i] = (Ap[uu] - Ap[u]); //combien d'infos j'envoie
 		if (i > 0)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
 	int u2 = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-	fprintf(stderr,"%d : u2=%d \n",rang,u2);
-
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
