@@ -337,7 +337,10 @@ double dot(const int n, const double *x, const double *y)
 	double sum = 0.0;
 	for (int i = binf; i < bsup; i++)
 		sum += x[i] * y[i];
+	double start1 = wtime();
 	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	double stop1 = wtime();
+	fprintf(stderr, "   allreduce %.1fs\n", stop1 - start1);
 	return sum;
 }
 
@@ -395,7 +398,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double old_rz = rz;
 		/*ALL GATHERV*/
 		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+		double start1 = wtime();
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+		double stop1 = wtime();
+		fprintf(stderr, "   allgather %.1fs\n", stop1 - start1);
+
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 
