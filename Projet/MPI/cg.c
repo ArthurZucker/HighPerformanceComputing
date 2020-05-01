@@ -398,13 +398,10 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		double old_rz = rz;
 		/*ALL GATHERV*/
 		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
-		start1 = wtime();
-		double start2 = MPI_Wtime();
+		start1 = MPI_Wtime();
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
-		double stop2 = MPI_Wtime();
-		stop1 = wtime();
+		stop1 = MPI_Wtime();
 		cpt+=stop1-start1;
-		fprintf(stderr, "   allgather wtime %.2fs\n", stop2 - start2);
 
 		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
