@@ -33,18 +33,24 @@
 #include <omp.h>
 #endif
 
-int rang,nbp;
+int rang, nbp;
 MPI_Status status;
 MPI_Request request;
 
-#define THRESHOLD 1e-8		// maximum tolerance threshold
+int *displs;
+int *rcounts ;
 
-struct csr_matrix_t {
-	int n;			// dimension
-	int nz;			// number of non-zero entries
-	int *Ap;		// row pointers
-	int *Aj;		// column indices
-	double *Ax;		// actual coefficient
+int binf;
+int bsup;
+#define THRESHOLD 1e-8 // maximum tolerance threshold
+
+struct csr_matrix_t
+{
+	int n;		// dimension
+	int nz;		// number of non-zero entries
+	int *Ap;	// row pointers
+	int *Aj;	// column indices
+	double *Ax; // actual coefficient
 };
 
 /*************************** Utility functions ********************************/
@@ -65,12 +71,16 @@ double PRF(int i, unsigned long long seed)
 {
 	unsigned long long y = i, x = 0xBaadCafe, b = 0xDeadBeef, a = seed;
 	R(x, y, b);
-	for (int i = 0; i < 31; i++) {
+	for (int i = 0; i < 31; i++)
+	{
 		R(a, b, i);
 		R(x, y, b);
 	}
 	x += i;
-	union { double d; unsigned long long l;	} res;
+	union {
+		double d;
+		unsigned long long l;
+	} res;
 	res.l = ((x << 2) >> 2) | (((1 << 10) - 1ll) << 52);
 	return 2 * (res.d - 1.5);
 }
@@ -78,7 +88,7 @@ double PRF(int i, unsigned long long seed)
 /*************************** Matrix IO ****************************************/
 
 /* Load MatrixMarket sparse symetric matrix from the file descriptor f */
-struct csr_matrix_t *load_mm(FILE * f)
+struct csr_matrix_t *load_mm(FILE *f)
 {
 	MM_typecode matcode;
 	int n, m, nnz;
@@ -87,11 +97,12 @@ struct csr_matrix_t *load_mm(FILE * f)
 	double start = wtime();
 
 	/* read the header, check format */
-	int *Ti ;
+	int *Ti;
 	int *Tj;
 	double *Tx;
 	double stop;
-	if (rang == 0) {
+	if (rang == 0)
+	{
 		if (mm_read_banner(f, &matcode) != 0)
 			errx(1, "Could not process Matrix Market banner.\n");
 		if (!mm_is_matrix(matcode) || !mm_is_sparse(matcode))
@@ -111,12 +122,13 @@ struct csr_matrix_t *load_mm(FILE * f)
 			err(1, "Cannot allocate (triplet) sparse matrix");
 
 		/* Parse and load actual entries */
-		for (int u = 0; u < nnz; u++) {
+		for (int u = 0; u < nnz; u++)
+		{
 			int i, j;
 			double x;
 			if (3 != fscanf(f, "%d %d %lg\n", &i, &j, &x))
 				errx(1, "parse error entry %d\n", u);
-			Ti[u] = i - 1;	/* MatrixMarket is 1-based */
+			Ti[u] = i - 1; /* MatrixMarket is 1-based */
 			Tj[u] = j - 1;
 			Tx[u] = x;
 		}
@@ -126,12 +138,13 @@ struct csr_matrix_t *load_mm(FILE * f)
 		start = wtime();
 	}
 	/* -------- STEP 2: Convert to CSR (compressed sparse row) representation ----- */
+
 	double start2 = wtime();
-	MPI_Bcast(&n,1,MPI_INT,0,MPI_COMM_WORLD);
-	MPI_Bcast(&nnz,1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&nnz, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	double stop2 = wtime();
-	if (rang==0)
-		fprintf(stderr, "     ---> exchange of and nnz %.1fs\n", stop2 - start2);
+	if (rang == 0)
+		fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
 	/* allocate CSR matrix */
 	struct csr_matrix_t *A = malloc(sizeof(*A));
 	if (A == NULL)
@@ -145,21 +158,24 @@ struct csr_matrix_t *load_mm(FILE * f)
 
 	int sum;
 	/* the following is essentially a bucket sort */
-	if(rang==0){
+	if (rang == 0)
+	{
 		/* Count the number of entries in each row */
 		for (int i = 0; i < n; i++)
 			w[i] = 0;
-		for (int u = 0; u < nnz; u++) {
+		for (int u = 0; u < nnz; u++)
+		{
 			int i = Ti[u];
 			int j = Tj[u];
 			w[i]++;
-			if (i != j)	/* the file contains only the lower triangular part */
+			if (i != j) /* the file contains only the lower triangular part */
 				w[j]++;
 		}
 
 		/* Compute row pointers (prefix-sum) */
 		sum = 0;
-		for (int i = 0; i < n; i++) {
+		for (int i = 0; i < n; i++)
+		{
 			Ap[i] = sum;
 			sum += w[i];
 			w[i] = Ap[i];
@@ -167,14 +183,16 @@ struct csr_matrix_t *load_mm(FILE * f)
 		Ap[n] = sum;
 
 		/* Dispatch entries in the right rows */
-		for (int u = 0; u < nnz; u++) {
+		for (int u = 0; u < nnz; u++)
+		{
 			int i = Ti[u];
 			int j = Tj[u];
 			double x = Tx[u];
 			Aj[w[i]] = j;
 			Ax[w[i]] = x;
 			w[i]++;
-			if (i != j) {	/* off-diagonal entries are duplicated */
+			if (i != j)
+			{ /* off-diagonal entries are duplicated */
 				Aj[w[j]] = i;
 				Ax[w[j]] = x;
 				w[j]++;
@@ -190,28 +208,84 @@ struct csr_matrix_t *load_mm(FILE * f)
 		fprintf(stderr, "     ---> converted to CSR format in %.1fs\n", stop - start);
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (24. * nnz + 4. * n));
 	}
-
 	start = wtime();
-	if (rang==0) {
-		for (int i = 1; i < nbp; i++) {
-			int u = i*n/nbp;
-			MPI_Isend(&Ap[u], (n/nbp)+2,MPI_INT,i,0,MPI_COMM_WORLD,&request);
-			MPI_Isend(&Aj[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_INT,i,0,MPI_COMM_WORLD,&request);
-			MPI_Isend(&Ax[Ap[u]], (Ap[(i+1)*n/nbp]-Ap[u]),MPI_DOUBLE,i,0,MPI_COMM_WORLD,&request);
-		}
+
+	binf = rang * (n / nbp);
+	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
+
+	/* VERSION SCATTERV*/
+	int *displs  = (int *)malloc(nbp * sizeof(int));
+	int *scounts = (int *)malloc(nbp * sizeof(int));
+	displs[0] = 0;
+	for (int i = 0; i < nbp; i++)
+	{
+		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
+		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
 	}
-	else{
-		int u = rang*n/nbp;
-		MPI_Recv(&Ap[u],(n/nbp)+2,MPI_INT,0,0,MPI_COMM_WORLD,&status);
-		MPI_Recv(&Aj[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_INT,0,0,MPI_COMM_WORLD,&status);
-		MPI_Recv(&Ax[Ap[u]],(Ap[((rang+1)*n)/nbp]-Ap[u]),MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+	if (rang == 0)
+		fprintf(stderr, "\n%d : reste = %d \n", rang,n % nbp);
+	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
+	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
+	displs[0] = 0;
+	for (int i = 0; i < nbp; i++)
+	{
+		int u = i * (n / nbp);
+		int uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
+		scounts[i] = (Ap[uu] - Ap[u]); //combien d'infos j'envoie
+		if (i > 0)
+			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
+	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
+	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+	// if (rang==nbp-1)
+	// {
+	// 	for (int i = Ap[binf]; i < Ap[bsup]; i++)
+	// 	{
+	// 		fprintf(stderr,"Ax[%d]=%f \n",i,Ax[i]);
+	// 	}
+	// }
+
+
+
+
+
+	/* VERSION ISEND / RECV*/
+	// if (rang == 0)
+	// {
+	// 	for (int i = 1; i < nbp; i++)
+	// 	{
+	// 		int u = i * n / nbp;
+	// 		MPI_Isend(&Ap[u], (n / nbp) + 1 + (n % nbp) * (i == nbp - 1), MPI_INT, i, 0, MPI_COMM_WORLD, &request);
+	// 		MPI_Isend(&Aj[Ap[u]], (Ap[(i + 1) * n / nbp] - Ap[u]), MPI_INT, i, 0, MPI_COMM_WORLD, &request);
+	// 		MPI_Isend(&Ax[Ap[u]], (Ap[(i + 1) * n / nbp] - Ap[u]), MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &request);
+	// 	}
+	// }
+	// else
+	// {
+	// 	int u = rang * n / nbp;
+	// 	MPI_Recv(&Ap[u], (n / nbp) + 1 + (n % nbp) * (rang == nbp - 1), MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+	// 	MPI_Recv(&Aj[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+	// 	MPI_Recv(&Ax[Ap[u]], (Ap[((rang + 1) * n) / nbp] - Ap[u]), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
+	// }
+
+	/*VERSION BROADCAST*/
+	// MPI_Bcast(Ap,n + 1,MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Bcast(Aj,2*nnz,MPI_INT,0,MPI_COMM_WORLD);
+	// MPI_Bcast(Ax,2*nnz,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	// if(rang==nbp-1)
+	// 				for(int i=rang*n/nbp;i<(rang+1)*n/nbp+1;i++)
+	// 								fprintf(stderr,"Ap[%d]=%d \n",i,Ap[i]);
 	stop = wtime();
-	if (rang==0)
+
+	if (rang == 0)
 		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
 
 	A->n = n;
-	A->nz = Ap[(rang+1)*n/nbp] - Ap[rang*n/nbp];
+	A->nz = Ap[bsup] - Ap[binf];
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
@@ -227,12 +301,15 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
+	for (int i = binf; i < bsup; i++)
+	{
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
+		{
+			//if (rang==1) fprintf(stderr, "Ax[%d] = %f\n",u,Ax[u] );
 			if (i == Aj[u])
 				d[i] += Ax[u];
+		}
 	}
 }
 
@@ -242,12 +319,14 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	int n = A->n;
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
- 	double *Ax = A->Ax;
+	double *Ax = A->Ax;
 
-	#pragma omp parallel for schedule(guided) 
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++) {
+	#pragma omp parallel for schedule(guided)
+	for (int i = binf; i < bsup; i++)
+	{
 		y[i] = 0;
-		for (int u = Ap[i]; u < Ap[i + 1]; u++) {
+		for (int u = Ap[i]; u < Ap[i + 1]; u++)
+		{
 			int j = Aj[u];
 			double A_ij = Ax[u];
 			y[i] += A_ij * x[j];
@@ -262,9 +341,9 @@ double dot(const int n, const double *x, const double *y)
 {
 	double sum = 0.0;
 	#pragma omp parallel for reduction(+:sum)
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
+	for (int i = binf; i < bsup; i++)
 		sum += x[i] * y[i];
-	MPI_Allreduce(MPI_IN_PLACE,&sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	return sum;
 }
 
@@ -281,17 +360,17 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 {
 	int n = A->n;
 	int nz = A->nz;
-
-	if (rang==0) {
+	if (rang == 0)
+	{
 		fprintf(stderr, "[CG] Starting iterative solver\n");
 		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (12.0 * nz + 52.0 * n));
 		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
 	}
-	double *r = scratch + n;	// residue
-	double *z = scratch + 2 * n;	// preconditioned-residue
-	double *p = scratch + 3 * n;	// search direction
-	double *q = scratch + 4 * n;	// q == Ap
-	double *d = scratch + 5 * n;	// diagonal entries of A (Jacobi preconditioning)
+	double *r = scratch + n;	 // residue
+	double *z = scratch + 2 * n; // preconditioned-residue
+	double *p = scratch + 3 * n; // search direction
+	double *q = scratch + 4 * n; // q == Ap
+	double *d = scratch + 5 * n; // diagonal entries of A (Jacobi preconditioning)
 
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
@@ -303,46 +382,52 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
 	#pragma omp parallel for
-	for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){
+	for (int i = binf; i < bsup; i++)
+	{
 		x[i] = 0.0;
 		r[i] = b[i];
 		z[i] = r[i] / d[i];
 		p[i] = z[i];
 	}
+
+
 	double rz = dot(n, r, z);
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
-	while (norm(n, r) > epsilon) {
+	double norme = norm(n, r);
+	while (norme > epsilon)
+	{
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
-		sp_gemv(A, p, q);	/* q <-- A.p */
+		/*ALL GATHERV*/
+		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+		sp_gemv(A, p, q); /* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 
-		//vectorisation peut être faite ici
-		#pragma omp parallel for 
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++){ // x <-- x + alpha*p
-			x[i] += alpha * p[i];
-			r[i] -= alpha * q[i];
-			z[i] = r[i] / d[i];
-		}
-		// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// r <-- r - alpha*q
-		//
-		// for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// z <-- M^(-1).r
-		//
-		rz = dot(n, r, z);	// restore invariant
-		double beta = rz / old_rz;
-
 		#pragma omp parallel for
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// p <-- z + beta*p
+		for (int i = binf; i < bsup; i++)
+		{
+			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
+			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
+			z[i] = r[i] / d[i];	 	// z <-- M^(-1).r
+		}
+		rz = dot(n, r, z); 			// restore invariant
+		double beta = rz / old_rz;
+		#pragma omp parallel for
+		for (int i = binf; i < bsup; i++) // p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
-		double norme = norm(n, r);
+		norme = norm(n, r);
 		double t = wtime();
-		if (rang==0) {
-			if (t - last_display > 0.5) {
+		if (rang == 0)
+		{
+			if (t - last_display > 0.5)
+			{
 				/* verbosity */
-				double rate = iter / (t - start);	// iterations per s.
+				double rate = iter / (t - start); // iterations per s.
+				int nz = A->Ap[n];
 				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
 				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
 				fflush(stdout);
@@ -350,7 +435,8 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			}
 		}
 	}
-	if (rang==0) {
+	if (rang == 0)
+	{
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 	}
 }
@@ -364,14 +450,13 @@ struct option longopts[6] = {
 	{"matrix", required_argument, NULL, 'm'},
 	{"solution", required_argument, NULL, 'o'},
 	{"no-check", no_argument, NULL, 'c'},
-	{NULL, 0, NULL, 0}
-};
+	{NULL, 0, NULL, 0}};
 
 int main(int argc, char **argv)
 {
-	MPI_Init(&argc,&argv);
-	MPI_Comm_size (MPI_COMM_WORLD, &nbp);
-	MPI_Comm_rank (MPI_COMM_WORLD,&rang);
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &nbp);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rang);
 
 	/* Parse command-line options */
 	long long seed = 0;
@@ -380,8 +465,10 @@ int main(int argc, char **argv)
 	char *solution_filename = NULL;
 	int safety_check = 1;
 	char ch;
-	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
-		switch (ch) {
+	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1)
+	{
+		switch (ch)
+		{
 		case 's':
 			seed = atoll(optarg);
 			break;
@@ -404,7 +491,8 @@ int main(int argc, char **argv)
 
 	/* Load the matrix */
 	FILE *f_mat = stdin;
-	if (matrix_filename) {
+	if (matrix_filename)
+	{
 		f_mat = fopen(matrix_filename, "r");
 		if (f_mat == NULL)
 			err(1, "cannot matrix file %s", matrix_filename);
@@ -416,72 +504,70 @@ int main(int argc, char **argv)
 	double *mem = malloc(8 * n * sizeof(double));
 	if (mem == NULL)
 		err(1, "cannot allocate dense vectors");
-	double *x = mem;	/* solution vector */
-	double *b = mem + n;	/* right-hand side */
-	double *scratch = mem + 2 * n;	/* workspace for cg_solve() */
+	double *x = mem;			   /* solution vector */
+	double *b = mem + n;		   /* right-hand side */
+	double *scratch = mem + 2 * n; /* workspace for cg_solve() */
 
 	/* Prepare right-hand size */
-	if (rhs_filename) {	/* load from file */
+	if (rhs_filename)
+	{ /* load from file */
 		FILE *f_b = fopen(rhs_filename, "r");
 		if (f_b == NULL)
 			err(1, "cannot open %s", rhs_filename);
 		fprintf(stderr, "[IO] Loading b from %s\n", rhs_filename);
-		for (int i = 0; i < n; i++) {
+		for (int i = 0; i < n; i++)
+		{
 			if (1 != fscanf(f_b, "%lg\n", &b[i]))
 				errx(1, "parse error entry %d\n", i);
 		}
 		fclose(f_b);
 	}
-	else {
+	else
+	{
 		#pragma omp parallel for
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)
+		for (int i = binf; i < bsup; i++){
 			b[i] = PRF(i, seed);
+		}
 	}
-
+	displs = (int *)calloc(nbp, sizeof(int));
+	rcounts = (int *)calloc(nbp, sizeof(int));
+	for (int i = 0; i < nbp; i++)
+	{
+		int u = i * (n / nbp);
+		displs[i] = u;
+		rcounts[i] = (n / nbp) + (n % nbp) * (i == nbp - 1);
+	}
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
-
-
 	/* Check result */
-	if (safety_check) {
+	if (safety_check)
+	{
+		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		double *y = scratch;
-		sp_gemv(A, x, y);	// y = Ax
+		sp_gemv(A, x, y);
 		#pragma omp parallel for
-		for (int i = rang*n/nbp; i < (rang+1)*n/nbp; i++)	// y = Ax - b
+		for (int i = binf; i < bsup; i++) // y = Ax - b
 			y[i] -= b[i];
 		double norme = norm(n, y);
-		if (rang == 0) {
+		if (rang == 0)
+		{
 			fprintf(stderr, "[check] max error = %2.2e\n", norme);
 		}
 	}
-
-	if (rang != 0) {
-			MPI_Ssend(&x[rang*n/nbp],n/nbp, MPI_DOUBLE,0,0,MPI_COMM_WORLD);
+	else
+	{
+		MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	else{
-		// Root doit écrire le tableau final, on recoit les blocs dans un ordre aléatoire
-		for (int i = 0; i < nbp-1; i++) {
-			double *temp = malloc(n/nbp*sizeof(double));
-			MPI_Recv(temp,n/nbp,MPI_DOUBLE,MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
-			int giver = status.MPI_SOURCE;
-			for (int ii = 0; ii < n/nbp; ii++) {
-				x[giver*n/nbp+ii] = temp[ii];
-			}
-			free(temp);
-		}
-	}
-	// MPI_Gather(x1,n/nbp, MPI_DOUBLE, x1, n/nbp,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	/* Dump the solution vector */
-	if (rang==0) {
-		// x=x1;
+	if (rang == 0)
+	{
 		FILE *f_x = stdout;
-		if (solution_filename != NULL) {
+		if (solution_filename != NULL)
+		{
 			f_x = fopen(solution_filename, "w");
 			if (f_x == NULL)
 				err(1, "cannot open solution file %s", solution_filename);
 			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 		}
-		#pragma omp parallel for
 		for (int i = 0; i < n; i++)
 			fprintf(f_x, "%a\n", x[i]);
 	}
