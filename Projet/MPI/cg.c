@@ -438,6 +438,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 	}
 	fprintf(stderr, "   allgather %.2fs\n", cpt);
+
 }
 
 /******************************* main program *********************************/
