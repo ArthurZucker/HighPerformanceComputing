@@ -396,6 +396,9 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double last_display = start;
 	int iter = 0;
 	double norme = norm(n, r);
+	double start1;
+	double stop1;
+	double cpt=0.0;
 	while (norme > epsilon)
 	{
 		/* loop invariant : rz = dot(r, z) */
