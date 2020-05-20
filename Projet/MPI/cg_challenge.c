@@ -300,7 +300,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			p[i] = z[i] + beta * p[i];
 		iter++;
 		double t = wtime();
-		if(rang==0)
+		if(rang!=400)
 		{
 			if (t - last_display > 0.5) {
 				/* verbosity */
@@ -353,7 +353,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(450000, 5);
+	struct csr_matrix_t *A = build_mm(45000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
