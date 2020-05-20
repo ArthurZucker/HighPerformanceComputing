@@ -1,9 +1,9 @@
 # your choice of compiler
-CC = gcc
+CC = clang
 
 # Add your choice of flags
-CFLAGS = -O3 -Wall -Wextra -g -fopenmp
-LDLIBS = -lm -fopenmp
+CFLAGS = -O3 -Wall -Wextra -g -fopenmp -L/usr/local/opt/libomp/lib -I/usr/local/opt/libomp/include
+LDLIBS = -lm -fopenmp=libomp
 
 all : cg
 
