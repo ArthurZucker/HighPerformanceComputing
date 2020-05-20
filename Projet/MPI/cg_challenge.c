@@ -36,8 +36,8 @@ MPI_Request request;
 
 typedef int64_t i64;            // need 64-bit ints for more than 2^32 entries
 
-i64 *displs;
-i64 *rcounts ;
+int *displs;
+int *rcounts ;
 
 i64 binf;
 i64 bsup;
@@ -113,77 +113,52 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
 		err(1, "Cannot allocate (CSR) sparse matrix");
 
-	if(rang==0){
-		i64 k = 0;
-		double scale_a = easyness * log2(n);
-		double scale_b = log2(n);
-
-		for (i64 i = 0; i < n; i++) {
-			/* generate the i-th row of the matrix */
-
-			/* diagonal entry */
-			Ap[i] = k;
-			Aj[k] = i;
-			Ax[k] = scale_a + scale_b * normal_deviate(i, i);
-
-			/* other entries of the i-th row (below and above diagonal) */
-			i64 r = 1;
-			for (i64 l = 1; l < n; l *= 2) {
-				i64 u = i + l;
-				i64 v = i - l;
-				if (u < n) {
-					Aj[k + r] = u;
-					Ax[k + r] = -1 + normal_deviate(i*u, i+u);
-					r++;
-				}
-				if (0 <= v) {
-					Aj[k + r] = v;
-					Ax[k + r] = -1 + normal_deviate(i*v, i+v);
-					r++;
-				}
-			}
-			k += r;
-		}
-		Ap[n] = k;
-		double stop = wtime();
-		fprintf(stderr, "     ---> nnz = %" PRId64 "\n", k);
-		fprintf(stderr, "     ---> Assembled in CSR format in %.1fs\n", stop - start);
-		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (16. * k + 8. * n));
-	}
-
-	start = wtime();
+	i64 k = 0;
+	double scale_a = easyness * log2(n);
+	double scale_b = log2(n);
 
 	binf = rang * (n / nbp);
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
 
-	/* VERSION SCATTERV*/
-	i64 *displs  = (i64 *)malloc(nbp * sizeof(i64));
-	i64 *scounts = (i64 *)malloc(nbp * sizeof(i64));
-	displs[0] = 0;
-	for (i64 i = 0; i < nbp; i++)
-	{
-		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
-		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
+	if(rang!=0)
+		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
+
+	fprintf(stderr, "%ld\n",k);
+	for (i64 i = binf; i < bsup; i++) {
+		/* generate the i-th row of the matrix */
+
+		/* diagonal entry */
+		Ap[i] = k;
+		Aj[k] = i;
+		Ax[k] = scale_a + scale_b * normal_deviate(i, i);
+
+		/* other entries of the i-th row (below and above diagonal) */
+		i64 r = 1;
+		for (i64 l = binf*(rang!=0)+1*(rang==0); l < bsup; l *= 2) {
+			i64 u = i + l;
+			i64 v = i - l;
+			if (u < bsup) {
+				Aj[k + r] = u;
+				Ax[k + r] = -1 + normal_deviate(i*u, i+u);
+				r++;
+			}
+			if (0 <= v) {
+				Aj[k + r] = v;
+				Ax[k + r] = -1 + normal_deviate(i*v, i+v);
+				r++;
+			}
+		}
+		k += r;
 	}
-	if (rang == 0)
-		fprintf(stderr, "\n%d : reste = %ld \n", rang,n % nbp);
-	MPI_Scatterv(Ap, scounts, displs, MPI_LONG_INT, &Ap[binf], scounts[rang], MPI_LONG_INT, 0, MPI_COMM_WORLD);
-	displs[0] = 0;
-	for (i64 i = 0; i < nbp; i++)
-	{
-		i64 u = i * (n / nbp);
-		i64 uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
-		scounts[i] = (Ap[uu] - Ap[u]); //combien d'infos j'envoie
-		if (i > 0)
-			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
-	}
-	MPI_Scatterv(Aj, scounts, displs, MPI_LONG_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_LONG_INT	, 0, MPI_COMM_WORLD);
-	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	if(rang!=nbp-1)
+		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
+	if(rang == nbp-1)
+		Ap[n] = k;
 
 	double stop = wtime();
-
-	if (rang == 0)
-		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
+	fprintf(stderr, "     ---> nnz = %" PRId64 "\n", k);
+	fprintf(stderr, "     ---> Assembled in CSR format in %.1fs\n", stop - start);
+	fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (16. * k + 8. * n));
 
 	A->n = n;
 	A->nz = Ap[bsup] - Ap[binf];
@@ -365,7 +340,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(4500, 5);
+	struct csr_matrix_t *A = build_mm(450000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
@@ -380,11 +355,11 @@ int main(int argc, char **argv)
 	for (i64 i = binf; i < bsup; i++)
 		b[i] = PRF(i, seed);
 
-	displs = (i64 *)calloc(nbp, sizeof(i64));
-	rcounts = (i64 *)calloc(nbp, sizeof(i64));
-	for (i64 i = 0; i < nbp; i++)
+	displs = (int *)calloc(nbp, sizeof(int));
+	rcounts = (int *)calloc(nbp, sizeof(int));
+	for (int i = 0; i < nbp; i++)
 	{
-		i64 u = i * (n / nbp);
+		int u = i * (n / nbp);
 		displs[i] = u;
 		rcounts[i] = (n / nbp) + (n % nbp) * (i == nbp - 1);
 	}
