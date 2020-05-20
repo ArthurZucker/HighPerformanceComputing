@@ -32,15 +32,15 @@ int rang, nbp;
 MPI_Status status;
 MPI_Request request;
 
-int *displs;
-int *rcounts ;
-
-int binf;
-int bsup;
 #define THRESHOLD 1e-8		// maximum tolerance threshold
 
 typedef int64_t i64;            // need 64-bit ints for more than 2^32 entries
 
+i64 *displs;
+i64 *rcounts ;
+
+i64 binf;
+i64 bsup;
 struct csr_matrix_t {
 	i64 n;			// dimension (64-bit)
 	i64 nz;			// number of non-zero entries (64-bit)
@@ -157,28 +157,27 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
 
 	/* VERSION SCATTERV*/
-	int *displs  = (int *)malloc(nbp * sizeof(int));
-	int *scounts = (int *)malloc(nbp * sizeof(int));
+	i64 *displs  = (i64 *)malloc(nbp * sizeof(i64));
+	i64 *scounts = (i64 *)malloc(nbp * sizeof(i64));
 	displs[0] = 0;
-	for (int i = 0; i < nbp; i++)
+	for (i64 i = 0; i < nbp; i++)
 	{
 		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
 		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
 	}
 	if (rang == 0)
 		fprintf(stderr, "\n%d : reste = %ld \n", rang,n % nbp);
-	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(Ap, scounts, displs, MPI_LONG_INT, &Ap[binf], scounts[rang], MPI_LONG_INT, 0, MPI_COMM_WORLD);
 	displs[0] = 0;
-	for (int i = 0; i < nbp; i++)
+	for (i64 i = 0; i < nbp; i++)
 	{
-		int u = i * (n / nbp);
-		int uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
+		i64 u = i * (n / nbp);
+		i64 uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
 		scounts[i] = (Ap[uu] - Ap[u]); //combien d'infos j'envoie
 		if (i > 0)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
-	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(Aj, scounts, displs, MPI_LONG_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_LONG_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	double stop = wtime();
@@ -236,6 +235,7 @@ double dot(const i64 n, const double *x, const double *y)
 	double sum = 0.0;
 	for (i64 i = binf; i < bsup; i++)
 		sum += x[i] * y[i];
+	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	return sum;
 }
 
@@ -365,7 +365,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(450000000, 5);
+	struct csr_matrix_t *A = build_mm(4500, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
@@ -380,11 +380,11 @@ int main(int argc, char **argv)
 	for (i64 i = binf; i < bsup; i++)
 		b[i] = PRF(i, seed);
 
-	displs = (int *)calloc(nbp, sizeof(int));
-	rcounts = (int *)calloc(nbp, sizeof(int));
-	for (int i = 0; i < nbp; i++)
+	displs = (i64 *)calloc(nbp, sizeof(i64));
+	rcounts = (i64 *)calloc(nbp, sizeof(i64));
+	for (i64 i = 0; i < nbp; i++)
 	{
-		int u = i * (n / nbp);
+		i64 u = i * (n / nbp);
 		displs[i] = u;
 		rcounts[i] = (n / nbp) + (n % nbp) * (i == nbp - 1);
 	}
@@ -397,7 +397,7 @@ int main(int argc, char **argv)
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		double *y = scratch;
 		sp_gemv(A, x, y);											  // y = Ax
-		for (int i = binf; i < bsup; i++) // y = Ax - b
+		for (i64 i = binf; i < bsup; i++) // y = Ax - b
 			y[i] -= b[i];
 		double norme = norm(n, y);
 		if (rang == 0)
