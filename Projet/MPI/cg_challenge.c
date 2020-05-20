@@ -236,6 +236,7 @@ double dot(const i64 n, const double *x, const double *y)
 	double sum = 0.0;
 	for (i64 i = binf; i < bsup; i++)
 		sum += x[i] * y[i];
+	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	return sum;
 }
 
