@@ -366,7 +366,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(45000000, 5);
+	struct csr_matrix_t *A = build_mm(450000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
