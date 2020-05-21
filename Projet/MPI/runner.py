@@ -16,16 +16,16 @@ params['version'] = 3
 params['proof'] = 0x65dec1542f679f51
 
 # Paramètres du calcul (à adapter)
-params['matrix'] = "Queen_4147"
+params['matrix'] = "bcsstk13"
 params['users'] = ["Arthur Zucker", "Clément Apavou"]
 
 # Description du code exécuté
 params['software'] = """MPI"""
 
 # Description du matériel utilisé pour l'exécution
-params['nodes'] = 34   # nombre de noeuds
-params['cores'] = 68   # nombre total de coeurs
-params['hardware'] = """ppti-14-408-01 à ppti-14-408-17, 4coeurs 16Go RAM"""
+params['nodes'] = 1   # nombre de noeuds
+params['cores'] = 2   # nombre total de coeurs
+params['hardware'] = """Chez arthur"""
 
 # Comment exécuter le solveur :
 #   {matrix} sera remplacé par la valeur ci-dessus.
@@ -35,8 +35,8 @@ params['hardware'] = """ppti-14-408-01 à ppti-14-408-17, 4coeurs 16Go RAM"""
 #   On peut ajouter toutes les options qu'on veut, utiliser mpiexec, etc.
 #command_line = "./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
 #command_line = "zcat matrices/{matrix}.mtx.gz | ./cg --seed {seed}"
-#command_line = "mpiexec --n {cores} --hostfile hostfile ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
-command_line = "mpiexec -mca bt1_tcp_if_include eth1 --n {cores} --hostfile hostfile3408 sh -c 'zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/{matrix}.mtx.gz  | ./cg'  --matrix  --seed {seed}"
+command_line = "mpiexec --n {cores} --hostfile hostfile ./cg --matrix ../Matrix/{matrix}.mtx --seed {seed}"
+#command_line = "mpiexec -mca bt1_tcp_if_include eth1 --n {cores} --hostfile hostfile3408 sh -c 'zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/{matrix}.mtx.gz  | ./cg'  --matrix  --seed {seed}"
 #command_line = "mpiexec --n {nodes} -hostfile nodes.txt --map-by ppr:1:node ./cg --matrix {matrix}.mtx --seed {seed}"
 
 ######################### Main Program ###########################

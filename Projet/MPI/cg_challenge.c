@@ -240,6 +240,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double *p = scratch + 3 * n;	// search direction
 	double *q = scratch + 4 * n;	// q == Ap
 	double *d = scratch + 5 * n;	// diagonal entries of A (Jacobi preconditioning)
+	int nnz_all = A->Ap[n];
+	if(rang==0)
+		MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+	else
+		MPI_Reduce(&nnz_all, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
 
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
@@ -274,7 +279,8 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double start1;
 	double stop1;
 	double cpt=0.0;
-	while (norm(n, r) > epsilon) {
+	double norme = norm(n, r);
+	while (norme > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
@@ -299,24 +305,31 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			p[i] = z[i] + beta * p[i];
 		iter++;
 		double t = wtime();
-		if(rang!=400)
+		norme = norm(n, r);
+		if(rang==0)
 		{
 			if (t - last_display > 0.5) {
 				/* verbosity */
 				double rate = iter / (t - start);	// iterations per s.
-				int nz = A->Ap[n];
+				//int nz = A->Ap[n];
+				int nz = nnz_all;
 				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
-				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norm(n, r), iter, rate, GFLOPs);
+				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
 				fflush(stdout);
 				last_display = t;
 			}
 		}
 	}
-	if(rang==0)
+	if(rang==0){
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
-	MPI_Reduce(MPI_IN_PLACE,&cpt,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+		MPI_Reduce(MPI_IN_PLACE,&cpt,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	}
+	else{
+		MPI_Reduce(&cpt,&cpt,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	
+	}
 	if(rang==0)
-		fprintf(stderr, "Temp total passé dans les  allgather %.2fs\n", cpt);
+		fprintf(stderr, "Temp moyen passé dans les  allgather %.2fs\n", cpt/nbp);
 }
 
 /******************************* main program *********************************/
