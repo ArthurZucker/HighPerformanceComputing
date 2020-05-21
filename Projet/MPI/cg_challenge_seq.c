@@ -1,4 +1,4 @@
-/*
+/* 
  * Sequential implementation of the Conjugate Gradient Method.
  *
  * Authors : Lilia Ziane Khodja & Charles Bouillaguet
@@ -6,11 +6,11 @@
  * v1.01-challenge (2020-05-18)
  *
  * CHANGE LOG
- *
- * USAGE:
+ *  
+ * USAGE: 
  * 	$ ./cg_challenge
  *
- * This code is almost identical to the "normal" cg.c....
+ * This code is almost identical to the "normal" cg.c.... 
  * EXCEPT THAT:
  *  + most integers are now 64 bits (cf. typedef ... i64 below)
  *  + the matrix is not loaded from a file
@@ -26,21 +26,11 @@
 #include <getopt.h>
 #include <sys/time.h>
 #include <inttypes.h>
-#include <mpi.h>
-
-int rang, nbp;
-MPI_Status status;
-MPI_Request request;
 
 #define THRESHOLD 1e-8		// maximum tolerance threshold
 
 typedef int64_t i64;            // need 64-bit ints for more than 2^32 entries
 
-int *displs;
-int *rcounts ;
-
-i64 binf;
-i64 bsup;
 struct csr_matrix_t {
 	i64 n;			// dimension (64-bit)
 	i64 nz;			// number of non-zero entries (64-bit)
@@ -113,81 +103,45 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
 		err(1, "Cannot allocate (CSR) sparse matrix");
 
-	if(rang==0){
-		i64 k = 0;
-		double scale_a = easyness * log2(n);
-		double scale_b = log2(n);
+	i64 k = 0;
+	double scale_a = easyness * log2(n);
+	double scale_b = log2(n);
 
-		for (i64 i = 0; i < n; i++) {
-			/* generate the i-th row of the matrix */
+	for (i64 i = 0; i < n; i++) {
+		/* generate the i-th row of the matrix */
 
-			/* diagonal entry */
-			Ap[i] = k;
-			Aj[k] = i;
-			Ax[k] = scale_a + scale_b * normal_deviate(i, i);
+		/* diagonal entry */
+		Ap[i] = k;
+		Aj[k] = i;
+		Ax[k] = scale_a + scale_b * normal_deviate(i, i);
 
-			/* other entries of the i-th row (below and above diagonal) */
-			i64 r = 1;
-			for (i64 l = 1; l < n; l *= 2) {
-				i64 u = i + l;
-				i64 v = i - l;
-				if (u < n) {
-					Aj[k + r] = u;
-					Ax[k + r] = -1 + normal_deviate(i*u, i+u);
-					r++;
-				}
-				if (0 <= v) {
-					Aj[k + r] = v;
-					Ax[k + r] = -1 + normal_deviate(i*v, i+v);
-					r++;
-				}
+		/* other entries of the i-th row (below and above diagonal) */
+		i64 r = 1;
+		for (i64 l = 1; l < n; l *= 2) {
+			i64 u = i + l;
+			i64 v = i - l;
+			if (u < n) {
+				Aj[k + r] = u;
+				Ax[k + r] = -1 + normal_deviate(i*u, i+u);
+				r++;
 			}
-			k += r;
+			if (0 <= v) {
+				Aj[k + r] = v;
+				Ax[k + r] = -1 + normal_deviate(i*v, i+v);
+				r++;
+			}
 		}
-		Ap[n] = k;
-		double stop = wtime();
-		fprintf(stderr, "     ---> nnz = %" PRId64 "\n", k);
-		fprintf(stderr, "     ---> Assembled in CSR format in %.1fs\n", stop - start);
-		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (16. * k + 8. * n));
+		k += r;
 	}
-
-	start = wtime();
-	binf = rang * (n / nbp);
-	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-
-	/* VERSION SCATTERV*/
-	int *displs  = (int *)malloc(nbp * sizeof(int));
-	int *scounts = (int *)malloc(nbp * sizeof(int));
-	displs[0] = 0;
-	for (i64 i = 0; i < nbp; i++)
-	{
-		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
-		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
-	}
-	if (rang == 0)
-		fprintf(stderr, "\n%d : reste = %lld \n", rang,n % nbp);
-
-	MPI_Scatterv(Ap, scounts, displs, MPI_INT64_T, &Ap[binf], scounts[rang], MPI_INT64_T, 0, MPI_COMM_WORLD);
-	fprintf(stderr, "%d : Bug ici?\n", rang);
-	displs[0] = 0;
-	for (i64 i = 0; i < nbp; i++)
-	{
-		int u = i * (n / nbp);
-		int uu = ((i + 1) * (n / nbp))*(i!=nbp-1) + n*(i==nbp-1);
-		scounts[i] = (Ap[uu] - Ap[u]); //combien d'infos j'envoie
-		if (i > 0)
-			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
-	}
-	MPI_Scatterv(Aj, scounts, displs, MPI_INT64_T	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT64_T	, 0, MPI_COMM_WORLD);
-	MPI_Scatterv(Ax, scounts, displs, MPI_INT64_T, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT64_T, 0, MPI_COMM_WORLD);
+	Ap[n] = k;
 
 	double stop = wtime();
-
-	if (rang == 0)
-		fprintf(stderr, "     ---> Exchanged sum, Ap, Aj and Ax %.1fs\n", stop - start);
+	fprintf(stderr, "     ---> nnz = %" PRId64 "\n", k);
+	fprintf(stderr, "     ---> Assembled in CSR format in %.1fs\n", stop - start);
+	fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (16. * k + 8. * n));
 
 	A->n = n;
-	A->nz = Ap[bsup] - Ap[binf];
+	A->nz = k;
 	A->Ap = Ap;
 	A->Aj = Aj;
 	A->Ax = Ax;
@@ -203,7 +157,7 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	i64 *Ap = A->Ap;
 	i64 *Aj = A->Aj;
 	double *Ax = A->Ax;
-	for (i64 i = binf; i < bsup; i++) {
+	for (i64 i = 0; i < n; i++) {
 		d[i] = 0.0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++)
 			if (i == Aj[u])
@@ -218,7 +172,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	i64 *Ap = A->Ap;
 	i64 *Aj = A->Aj;
 	double *Ax = A->Ax;
-	for (i64 i = binf; i < bsup; i++) {
+	for (i64 i = 0; i < n; i++) {
 		y[i] = 0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++) {
 			i64 j = Aj[u];
@@ -234,9 +188,8 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 double dot(const i64 n, const double *x, const double *y)
 {
 	double sum = 0.0;
-	for (i64 i = binf; i < bsup; i++)
+	for (i64 i = 0; i < n; i++)
 		sum += x[i] * y[i];
-	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	return sum;
 }
 
@@ -253,12 +206,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 {
 	i64 n = A->n;
 	i64 nz = A->nz;
-	if(rang==0)
-	{
-		fprintf(stderr, "[CG] Starting iterative solver\n");
-		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (16.0 * nz + 52.0 * n));
-		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
-	}
+
+	fprintf(stderr, "[CG] Starting iterative solver\n");
+	fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (16.0 * nz + 52.0 * n));
+	fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
+
 	double *r = scratch + n;	// residue
 	double *z = scratch + 2 * n;	// preconditioned-residue
 	double *p = scratch + 3 * n;	// search direction
@@ -268,68 +220,53 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
 
-	/*
+	/* 
 	 * This function follows closely the pseudo-code given in the (english)
 	 * Wikipedia page "Conjugate gradient method". This is the version with
 	 * preconditionning.
 	 */
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
-	for (i64 i = binf; i < bsup; i++){
+	for (i64 i = 0; i < n; i++)
 		x[i] = 0.0;
+	for (i64 i = 0; i < n; i++)	// r <-- b - Ax == b
 		r[i] = b[i];
+	for (i64 i = 0; i < n; i++)	// z <-- M^(-1).r
 		z[i] = r[i] / d[i];
+	for (i64 i = 0; i < n; i++)	// p <-- z
 		p[i] = z[i];
-	}
 
 	double rz = dot(n, r, z);
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
-	double start1;
-	double stop1;
-	double cpt=0.0;
-
 	while (norm(n, r) > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
-		/*ALL GATHERV*/
-		start1 = MPI_Wtime();
-		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_INT64_T, p, rcounts, displs, MPI_INT64_T, MPI_COMM_WORLD);
-		stop1 = MPI_Wtime();
-		cpt+=stop1-start1;
-
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
-
-		for (i64 i = binf; i < bsup; i++)
-		{
-			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
-			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
-			z[i] = r[i] / d[i];	 	// z <-- M^(-1).r
-		}
+		for (i64 i = 0; i < n; i++)	// x <-- x + alpha*p
+			x[i] += alpha * p[i];
+		for (i64 i = 0; i < n; i++)	// r <-- r - alpha*q
+			r[i] -= alpha * q[i];
+		for (i64 i = 0; i < n; i++)	// z <-- M^(-1).r
+			z[i] = r[i] / d[i];
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
-		for (i64 i = binf; i < bsup; i++)	// p <-- z + beta*p
+		for (i64 i = 0; i < n; i++)	// p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
 		double t = wtime();
-		if(rang==0)
-		{
-			if (t - last_display > 0.5) {
-				/* verbosity */
-				double rate = iter / (t - start);	// iterations per s.
-				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
-				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norm(n, r), iter, rate, GFLOPs);
-				fflush(stdout);
-				last_display = t;
-			}
+		if (t - last_display > 0.5) {
+			/* verbosity */
+			double rate = iter / (t - start);	// iterations per s.
+			double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
+			fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norm(n, r), iter, rate, GFLOPs);
+			fflush(stdout);
+			last_display = t;
 		}
 	}
-	if(rang==0)
-		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
-
-	fprintf(stderr, "   allgather %.2fs\n", cpt);
+	fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 }
 
 /******************************* main program *********************************/
@@ -343,14 +280,9 @@ struct option longopts[4] = {
 
 int main(int argc, char **argv)
 {
-	MPI_Init(&argc, &argv);
-	MPI_Comm_size(MPI_COMM_WORLD, &nbp);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rang);
-
 	/* Parse command-line options */
 	long long seed = 0;
 	char *solution_filename = NULL;
-	int safety_check = 1;
 	char ch;
 	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (ch) {
@@ -366,7 +298,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(4500000, 5);
+	struct csr_matrix_t *A = build_mm(450000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
@@ -378,52 +310,21 @@ int main(int argc, char **argv)
 	double *scratch = mem + 2 * n;	/* workspace for cg_solve() */
 
 	/* Prepare right-hand size */
-	for (i64 i = binf; i < bsup; i++)
+	for (i64 i = 0; i < n; i++)
 		b[i] = PRF(i, seed);
-
-	displs = (int *)calloc(nbp, sizeof(int));
-	rcounts = (int *)calloc(nbp, sizeof(int));
-	for (i64 i = 0; i < nbp; i++)
-	{
-		int u = i * (n / nbp);
-		displs[i] = u;
-		rcounts[i] = (n / nbp) + (n % nbp) * (i == nbp - 1);
-	}
+	
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
 
-	/* Check result */
-	if (safety_check)
-	{
-		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_INT64_T, x, rcounts, displs, MPI_INT64_T, MPI_COMM_WORLD);
-		double *y = scratch;
-		sp_gemv(A, x, y);											  // y = Ax
-		for (i64 i = binf; i < bsup; i++) // y = Ax - b
-			y[i] -= b[i];
-		double norme = norm(n, y);
-		if (rang == 0)
-		{
-			fprintf(stderr, "[check] max error = %2.2e\n", norme);
-		}
-	}
-	else
-	{
-		MPI_Gatherv(MPI_IN_PLACE, 0, MPI_INT64_T, x, rcounts, displs, MPI_INT64_T, 0, MPI_COMM_WORLD);
-	}
-
 	/* Dump the solution vector */
-	if (rang == 0)
-	{
-		FILE *f_x = stdout;
-		if (solution_filename != NULL) {
-			f_x = fopen(solution_filename, "w");
-			if (f_x == NULL)
-				err(1, "cannot open solution file %s", solution_filename);
-			fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
-		}
-		for (i64 i = 0; i < n; i++)
-			fprintf(f_x, "%a\n", x[i]);
+	FILE *f_x = stdout;
+	if (solution_filename != NULL) {
+		f_x = fopen(solution_filename, "w");
+		if (f_x == NULL)
+			err(1, "cannot open solution file %s", solution_filename);
+		fprintf(stderr, "[IO] writing solution to %s\n", solution_filename);
 	}
-	MPI_Finalize();
+	for (i64 i = 0; i < n; i++)
+		fprintf(f_x, "%a\n", x[i]);
 	return EXIT_SUCCESS;
 }
