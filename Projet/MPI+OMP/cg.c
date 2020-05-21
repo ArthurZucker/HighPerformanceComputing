@@ -225,7 +225,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 	if (rang == 0)
 		fprintf(stderr, "\n%d : reste = %d \n", rang,n % nbp);
 	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
+
 	displs[0] = 0;
 	for (int i = 0; i < nbp; i++)
 	{
@@ -237,8 +237,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 	}
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	// if (rang==nbp-1)
 	// {
@@ -306,7 +304,6 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
 		{
-			//if (rang==1) fprintf(stderr, "Ax[%d] = %f\n",u,Ax[u] );
 			if (i == Aj[u])
 				d[i] += Ax[u];
 		}
@@ -404,7 +401,6 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
-		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		start1 = MPI_Wtime();
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		stop1 = MPI_Wtime();
@@ -465,6 +461,14 @@ int main(int argc, char **argv)
 	MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &nbp);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rang);
+
+	int c=0;
+	#pragma omp parallel
+	{
+	c++;
+	printf("c=%d thread %d\n",
+	c, omp_get_num_threads());
+	}
 
 	/* Parse command-line options */
 	long long seed = 0;
