@@ -88,7 +88,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 {
 	MM_typecode matcode;
 	int n, m, nnz;
-
 	/* -------- STEP 1 : load the matrix in COOrdinate format */
 	double start = wtime();
 
@@ -134,10 +133,10 @@ struct csr_matrix_t *load_mm(FILE *f)
 		start = wtime();
 	}
 	/* -------- STEP 2: Convert to CSR (compressed sparse row) representation ----- */
-
 	double start2 = wtime();
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&nnz, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
 	double stop2 = wtime();
 	if (rang == 0)
 		fprintf(stderr, "     ---> envoie de n et nnz %.1fs\n", stop2 - start2);
@@ -210,6 +209,7 @@ struct csr_matrix_t *load_mm(FILE *f)
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
 
 	/* VERSION SCATTERV*/
+	int u1 = rang * (n / nbp);
 	int *displs  = (int *)malloc(nbp * sizeof(int));
 	int *scounts = (int *)malloc(nbp * sizeof(int));
 	displs[0] = 0;
@@ -218,9 +218,13 @@ struct csr_matrix_t *load_mm(FILE *f)
 		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
 		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
 	}
-	if (rang == 0)
-		fprintf(stderr, "\n%d : reste = %d \n", rang,n % nbp);
-	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
+	if(rang==0){
+		MPI_Scatterv(Ap, scounts, displs, MPI_INT, MPI_IN_PLACE, 0, MPI_INT, 0, MPI_COMM_WORLD);
+	}
+	else{
+		MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[u1], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
+	}
+	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[u1], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
 	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
 	displs[0] = 0;
 	for (int i = 0; i < nbp; i++)
@@ -231,10 +235,20 @@ struct csr_matrix_t *load_mm(FILE *f)
 		if (i > 0)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
+	int u2 = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
+	if(rang==0){
+		MPI_Scatterv(Aj, scounts, displs, MPI_INT	, MPI_IN_PLACE, 0, MPI_INT	, 0, MPI_COMM_WORLD);
+		MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE,MPI_IN_PLACE, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	}
+	else{
+		MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
+		MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	}
+
+	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
+	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	// if (rang==nbp-1)
 	// {

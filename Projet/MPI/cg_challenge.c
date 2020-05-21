@@ -110,8 +110,14 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	i64 *Ap = malloc((n + 1) * sizeof(*Ap));
 	i64 *Aj = malloc(nzmax * sizeof(*Ap));
 	double *Ax = malloc(nzmax * sizeof(*Ax));
-	if (w == NULL || Ap == NULL || Aj == NULL || Ax == NULL)
-		err(1, "Cannot allocate (CSR) sparse matrix");
+	if (w == NULL )
+		err(1, "Cannot allocate w sparse matrix");
+	if(Ap == NULL )
+		err(1, "Cannot allocate Ap sparse matrix");
+	if(Aj == NULL )
+		err(1, "Cannot allocate Aj sparse matrix");
+	if(Ax == NULL )
+		err(1, "Cannot allocate Ax sparse matrix");
 
 	i64 k = 0;
 	double scale_a = easyness * log2(n);
@@ -123,7 +129,6 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	if(rang!=0)
 		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
 
-	fprintf(stderr, "%ld\n",k);
 	for (i64 i = binf; i < bsup; i++) {
 		/* generate the i-th row of the matrix */
 
@@ -242,7 +247,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double *q = scratch + 4 * n;	// q == Ap
 	double *d = scratch + 5 * n;	// diagonal entries of A (Jacobi preconditioning)
 	int nnz_all = A->Ap[n];
-	MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+	if(rang==0)
+		MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+	else
+		MPI_Reduce(&nnz_all, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
 	// if(rang==0){
@@ -317,10 +326,16 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			}
 		}
 	}
-	if(rang==0)
+	if(rang==0){
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
+		MPI_Reduce(MPI_IN_PLACE,&cpt,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	}
+	else{
+		MPI_Reduce(&cpt,&cpt,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 
-	fprintf(stderr, "   allgather %.2fs\n", cpt);
+	}
+	if(rang==0)
+		fprintf(stderr, "Temp moyen passé dans les allgather %.2fs\n", cpt/nbp);
 }
 
 /******************************* main program *********************************/
@@ -357,7 +372,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(45000000, 5);
+	struct csr_matrix_t *A = build_mm(450000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
