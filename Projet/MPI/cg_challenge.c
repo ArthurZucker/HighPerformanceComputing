@@ -241,8 +241,8 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double *p = scratch + 3 * n;	// search direction
 	double *q = scratch + 4 * n;	// q == Ap
 	double *d = scratch + 5 * n;	// diagonal entries of A (Jacobi preconditioning)
-	int nnz_all = nnz;
-	MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE,0, MPI_SUM, MPI_COMM_WORLD);
+	int nnz_all = A->Ap[n];
+	MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
 	// if(rang==0){
