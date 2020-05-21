@@ -123,7 +123,6 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	if(rang!=0)
 		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
 
-	fprintf(stderr, "%ld\n",k);
 	for (i64 i = binf; i < bsup; i++) {
 		/* generate the i-th row of the matrix */
 
@@ -315,8 +314,9 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	}
 	if(rang==0)
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
-
-	fprintf(stderr, "   allgather %.2fs\n", cpt);
+	MPI_Reduce(MPI_IN_PLACE,&cpt,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	if(rang==0)
+		fprintf(stderr, "Temp total passé dans les  allgather %.2fs\n", cpt);
 }
 
 /******************************* main program *********************************/
