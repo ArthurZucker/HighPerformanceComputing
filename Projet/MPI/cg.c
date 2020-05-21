@@ -397,7 +397,6 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		p[i] = z[i];
 	}
 
-
 	double rz = dot(n, r, z);
 	double start = wtime();
 	double last_display = start;
@@ -570,6 +569,7 @@ int main(int argc, char **argv)
 	{
 		MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
+
 	if (rang == 0)
 	{
 		FILE *f_x = stdout;
