@@ -146,14 +146,23 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	if(rang!=nbp-1)
 		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
 
-	fprintf(stderr, "rang %d : %ld\n", rang,Ap[bsup]-Ap[binf] );
+	fprintf(stderr, "rang %d Ap[bsup]-Ap[binf]: %ld\n", rang, Ap[bsup]-Ap[binf] );
+	fprintf(stderr, "rang %d nzmax = %ld\n", rang, nzmax );
 
-	i64 *Aj = malloc(Ap[bsup]-Ap[binf] * sizeof(*Ap));
+	// i64 *Aj = malloc(nzmax * sizeof(*Ap));
+	// double *Ax = malloc(nzmax * sizeof(*Ax));
+	i64 *Aj = malloc(Ap[bsup]-Ap[binf] * sizeof(*Aj));
 	double *Ax = malloc(Ap[bsup]-Ap[binf] * sizeof(*Ax));
-	if(Aj == NULL )
-		err(1, "Cannot allocate Aj sparse matrix");
-	if(Ax == NULL )
+	if(Aj == NULL ){
+		err(1, " rang: %d Cannot allocate Aj sparse matrix",rang);
+		exit(0);
+	}
+	if(Ax == NULL ){
 		err(1, "Cannot allocate Ax sparse matrix");
+	}
+	else{
+		fprintf(stderr,"rang %d : ok\n", rang);
+	}
 	/*
 	Comme on a un décalage d'indice dans l'écriture de Aj et Ax de K_initiale
 	Il faut le prendre en compte dans toutes les boucles suivantes.
@@ -400,7 +409,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(45000000, 5);
+	struct csr_matrix_t *A = build_mm(450000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
