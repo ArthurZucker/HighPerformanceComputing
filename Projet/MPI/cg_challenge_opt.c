@@ -123,10 +123,6 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 
 	binf = rang * (n / nbp);
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-<<<<<<< HEAD
-=======
-
->>>>>>> 3b83f757be82673ffdcaf3ca6302705ac3c91f9a
 	if(rang!=0)
 		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
 	kini = k;
@@ -148,33 +144,12 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	Ap[bsup] = k;
 	if(rang!=nbp-1)
 		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
-<<<<<<< HEAD
-	i64 *Aj = malloc(k-kini * sizeof(*Ap));
+	i64 *Aj = malloc(k-kini * sizeof(*Aj));
 	double *Ax = malloc(k-kini * sizeof(*Ax));
 	if(Aj == NULL )
 		err(1, "Cannot allocate Aj sparse matrix");
 	if(Ax == NULL )
 		err(1, "Cannot allocate Ax sparse matrix");
-=======
-
-	fprintf(stderr, "rang %d Ap[bsup]-Ap[binf]: %ld\n", rang, Ap[bsup]-Ap[binf] );
-	fprintf(stderr, "rang %d nzmax = %ld\n", rang, nzmax );
-
-	// i64 *Aj = malloc(nzmax * sizeof(*Ap));
-	// double *Ax = malloc(nzmax * sizeof(*Ax));
-	i64 *Aj = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Aj));
-	double *Ax = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Ax));
-	if(Aj == NULL ){
-		err(1, " rang: %d Cannot allocate Aj sparse matrix",rang);
-		exit(0);
-	}
-	if(Ax == NULL ){
-		err(1, "Cannot allocate Ax sparse matrix");
-	}
-	else{
-		fprintf(stderr,"rang %d : ok\n", rang);
-	}
->>>>>>> 3b83f757be82673ffdcaf3ca6302705ac3c91f9a
 	/*
 	Comme on a un décalage d'indice dans l'écriture de Aj et Ax de K_initiale
 	Il faut le prendre en compte dans toutes les boucles suivantes.
@@ -207,10 +182,6 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 			}
 		}
 	}
-<<<<<<< HEAD
-=======
-
->>>>>>> 3b83f757be82673ffdcaf3ca6302705ac3c91f9a
 	double stop = wtime();
 	if(rang ==0){
 		fprintf(stderr, "     ---> nnz = %" PRId64 "\n", k);
@@ -424,11 +395,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-<<<<<<< HEAD
 	struct csr_matrix_t *A = build_mm(45000000, 5);
-=======
-	struct csr_matrix_t *A = build_mm(450000000, 5);
->>>>>>> 3b83f757be82673ffdcaf3ca6302705ac3c91f9a
 
 	/* Allocate memory */
 	i64 n = A->n;
