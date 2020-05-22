@@ -206,8 +206,8 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	for (i64 i = binf; i < bsup; i++) {
 		d[(i-binf)] = 0.0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++)
-			if (i == Aj[u-kini])
-				d[(i-binf)] += Ax[u-kini];
+			if (i == Aj[(u-kini)])
+				d[(i-binf)] += Ax[(u-kini)];
 	}
 }
 
@@ -221,8 +221,8 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	for (i64 i = binf; i < bsup; i++) {
 		y[(i-binf)] = 0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++) {
-			i64 j = Aj[u-kini];
-			double A_ij = Ax[u-kini];
+			i64 j = Aj[(u-kini)];
+			double A_ij = Ax[(u-kini)];
 			y[(i-binf)] += A_ij * x[j];
 		}
 	}
@@ -272,11 +272,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (16.0 * nz + 52.0 * n));
 		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
 	}
-	double *r = scratch + n/nbp;	// residue
-	double *z = scratch + 2 * n/nbp;	// preconditioned-residue
-	double *p = scratch + 2 * n/nbp + n;	// search direction
-	double *q = scratch + 3 * n/nbp + n;	// q == Ap
-	double *d = scratch + 4 * n/nbp + n;	// diagonal entries of A (Jacobi preconditioning)
+	double *r = scratch + n/nbp + (n % nbp) * (i == nbp - 1);	// residue
+	double *z = scratch + 2 * n/nbp + 2*(n % nbp) * (i == nbp - 1);	// preconditioned-residue
+	double *p = scratch + 2 * n/nbp + n +2*(n % nbp) * (i == nbp - 1);	// search direction
+	double *q = scratch + 3 * n/nbp + n +3*(n % nbp) * (i == nbp - 1);	// q == Ap
+	double *d = scratch + 4 * n/nbp + n +4*(n % nbp) * (i == nbp - 1);	// diagonal entries of A (Jacobi preconditioning)
 	int nnz_all = A->Ap[n];
 	if(rang==0)
 		MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
@@ -409,12 +409,12 @@ int main(int argc, char **argv)
 
 	/* Allocate memory */
 	i64 n = A->n;
-	double *mem = malloc((7 * n/nbp +n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
+	double *mem = malloc((7 * ( n/nbp + (n % nbp) * (i == nbp - 1))) +n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
 	if (mem == NULL)
 		err(1, "cannot allocate dense vectors");
 	double *x = mem;	/* solution vector */
-	double *b = mem + n/nbp;	/* right-hand side */
-	double *scratch = mem + 2 * n/nbp;	/* workspace for cg_solve() */
+	double *b = mem + n/nbp  + (n % nbp) * (i == nbp - 1);	/* right-hand side */
+	double *scratch = mem + 2 * n/nbp  + 2*(n % nbp) * (i == nbp - 1);;	/* workspace for cg_solve() */
 
 	/* Prepare right-hand size */
 	for (i64 i = binf; i < bsup; i++)
