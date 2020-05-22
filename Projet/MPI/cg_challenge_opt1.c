@@ -123,6 +123,7 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 
 	binf = rang * (n / nbp);
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
+
 	if(rang!=0)
 		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
 	kini = k;
@@ -144,12 +145,24 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	Ap[bsup] = k;
 	if(rang!=nbp-1)
 		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
-	i64 *Aj = malloc(k-kini * sizeof(*Aj));
-	double *Ax = malloc(k-kini * sizeof(*Ax));
-	if(Aj == NULL )
-		err(1, "Cannot allocate Aj sparse matrix");
-	if(Ax == NULL )
+
+	fprintf(stderr, "rang %d Ap[bsup]-Ap[binf]: %ld\n", rang, Ap[bsup]-Ap[binf] );
+	fprintf(stderr, "rang %d nzmax = %ld\n", rang, nzmax );
+
+	// i64 *Aj = malloc(nzmax * sizeof(*Ap));
+	// double *Ax = malloc(nzmax * sizeof(*Ax));
+	i64 *Aj = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Aj));
+	double *Ax = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Ax));
+	if(Aj == NULL ){
+		err(1, " rang: %d Cannot allocate Aj sparse matrix",rang);
+		exit(0);
+	}
+	if(Ax == NULL ){
 		err(1, "Cannot allocate Ax sparse matrix");
+	}
+	else{
+		fprintf(stderr,"rang %d : ok\n", rang);
+	}
 	/*
 	Comme on a un décalage d'indice dans l'écriture de Aj et Ax de K_initiale
 	Il faut le prendre en compte dans toutes les boucles suivantes.
@@ -182,6 +195,7 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 			}
 		}
 	}
+
 	double stop = wtime();
 	if(rang ==0){
 		fprintf(stderr, "     ---> nnz = %" PRId64 "\n", k);
@@ -207,10 +221,10 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	i64 *Aj = A->Aj;
 	double *Ax = A->Ax;
 	for (i64 i = binf; i < bsup; i++) {
-		d[i-binf] = 0.0;
+		d[i] = 0.0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++)
 			if (i == Aj[u-kini])
-				d[i-binf] += Ax[u-kini];
+				d[i] += Ax[u-kini];
 	}
 }
 
@@ -222,11 +236,11 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	i64 *Aj = A->Aj;
 	double *Ax = A->Ax;
 	for (i64 i = binf; i < bsup; i++) {
-		y[i-binf] = 0;
+		y[i] = 0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++) {
 			i64 j = Aj[u-kini];
 			double A_ij = Ax[u-kini];
-			y[i-binf] += A_ij * x[j];
+			y[i] += A_ij * x[j];
 		}
 	}
 }
@@ -238,22 +252,11 @@ double dot(const i64 n, const double *x, const double *y)
 {
 	double sum = 0.0;
 	for (i64 i = binf; i < bsup; i++)
-		sum += x[i-binf] * y[i-binf];
+		sum += x[i] * y[i];
 	// fprintf(stderr, "%d : dot\n",rang );
 	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	return sum;
 }
-
-double dot_p(const i64 n, const double *x, const double *y)
-{
-	double sum = 0.0;
-	for (i64 i = binf; i < bsup; i++)
-		sum += x[i] * y[i-binf];
-	// fprintf(stderr, "%d : dot\n",rang );
-	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	return sum;
-}
-
 
 /* euclidean norm (a.k.a 2-norm) */
 double norm(const i64 n, const double *x)
@@ -275,11 +278,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (16.0 * nz + 52.0 * n));
 		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
 	}
-	double *r = scratch + n/nbp;	// residue
-	double *z = scratch + 2 * n/nbp;	// preconditioned-residue
-	double *p = scratch + 2 * n/nbp + n;	// search direction
-	double *q = scratch + 3 * n/nbp + n;	// q == Ap
-	double *d = scratch + 4 * n/nbp + n;	// diagonal entries of A (Jacobi preconditioning)
+	double *r = scratch + n;	// residue
+	double *z = scratch + 2 * n;	// preconditioned-residue
+	double *p = scratch + 3 * n;	// search direction
+	double *q = scratch + 4 * n;	// q == Ap
+	double *d = scratch + 5 * n;	// diagonal entries of A (Jacobi preconditioning)
 	int nnz_all = A->Ap[n];
 	if(rang==0)
 		MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
@@ -301,10 +304,10 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
 	for (i64 i = binf; i < bsup; i++){
-		x[i-binf] = 0.0;
-		r[i-binf] = b[i-binf];
-		z[i-binf] = r[i-binf] / d[i-binf];
-		p[i] = z[i-binf];
+		x[i] = 0.0;
+		r[i] = b[i];
+		z[i] = r[i] / d[i];
+		p[i] = z[i];
 	}
 
 	double rz = dot(n, r, z);
@@ -331,20 +334,18 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		cpt+=stop1-start1;
 
 		sp_gemv(A, p, q);	/* q <-- A.p */
-		double alpha = old_rz / dot_p(n, p, q);
+		double alpha = old_rz / dot(n, p, q);
 
-		fprintf(stderr, "%f\n", alpha);
-		
 		for (i64 i = binf; i < bsup; i++)
 		{
-			x[i-binf] += alpha * p[i]; 	// x <-- x + alpha*p
-			r[i-binf] -= alpha * q[i-binf]; 	// r <-- r - alpha*q
-			z[i-binf] = r[i-binf] / d[i-binf];	 	// z <-- M^(-1).r
+			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
+			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
+			z[i] = r[i] / d[i];	 	// z <-- M^(-1).r
 		}
 		rz = dot(n, r, z);	// restore invariant
 		double beta = rz / old_rz;
 		for (i64 i = binf; i < bsup; i++)	// p <-- z + beta*p
-			p[i] = z[i-binf] + beta * p[i];
+			p[i] = z[i] + beta * p[i];
 		iter++;
 		double t = wtime();
 		norme = norm(n, r);
@@ -408,24 +409,20 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-<<<<<<< HEAD
-	struct csr_matrix_t *A = build_mm(45000000, 5);
-=======
-	struct csr_matrix_t *A = build_mm(45000, 5);
->>>>>>> 4ce2cfbee857bafb5d4c4c0bf4653712c89a0215
+	struct csr_matrix_t *A = build_mm(450000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
-	double *mem = malloc((7 * n/nbp +n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
+	double *mem = malloc(8 * n * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
 	if (mem == NULL)
 		err(1, "cannot allocate dense vectors");
 	double *x = mem;	/* solution vector */
-	double *b = mem + n/nbp;	/* right-hand side */
-	double *scratch = mem + 2 * n/nbp;	/* workspace for cg_solve() */
+	double *b = mem + n;	/* right-hand side */
+	double *scratch = mem + 2 * n;	/* workspace for cg_solve() */
 
 	/* Prepare right-hand size */
 	for (i64 i = binf; i < bsup; i++)
-		b[i-binf] = PRF(i, seed);
+		b[i] = PRF(i, seed);
 
 	displs = (int *)calloc(nbp, sizeof(int));
 	rcounts = (int *)calloc(nbp, sizeof(int));
@@ -445,7 +442,7 @@ int main(int argc, char **argv)
 		double *y = scratch;
 		sp_gemv(A, x, y);											  // y = Ax
 		for (i64 i = binf; i < bsup; i++) // y = Ax - b
-			y[i-binf] -= b[i-binf];
+			y[i] -= b[i];
 		double norme = norm(n, y);
 		if (rang == 0)
 		{
