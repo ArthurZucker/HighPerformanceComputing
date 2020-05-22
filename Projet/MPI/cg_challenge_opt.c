@@ -123,21 +123,33 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 
 	binf = rang * (n / nbp);
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
+
 	if(rang!=0)
-		MPI_Recv(&kini, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
+	kini = k;
 	for (i64 i = binf; i < bsup; i++) {
 		i64 r = 1;
 		Ap[i] = k;
 		for (i64 l = binf*(rang!=0)+1*(rang==0); l < bsup; l *= 2) {
-			r+=(i + l < bsup)*1+(0 <= i -l)*1;
+			i64 u = i + l;
+			i64 v = i - l;
+			if (u < bsup) {
+				r++;
+			}
+			if (0 <= v) {
+				r++;
+			}
 		}
 		k += r;
 	}
 	Ap[bsup] = k;
 	if(rang!=nbp-1)
 		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
-	i64 *Aj = malloc(k-kini * sizeof(*Ap));
-	double *Ax = malloc(k-kini * sizeof(*Ax));
+
+	fprintf(stderr, "rang %d : %ld\n", rang,Ap[bsup]-Ap[binf] );
+
+	i64 *Aj = malloc(Ap[bsup]-Ap[binf] * sizeof(*Ap));
+	double *Ax = malloc(Ap[bsup]-Ap[binf] * sizeof(*Ax));
 	if(Aj == NULL )
 		err(1, "Cannot allocate Aj sparse matrix");
 	if(Ax == NULL )
@@ -149,12 +161,11 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 																				et 	Ax[indice-kini]
 	*/
 
-	if(rang!=0)
-		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
 	for (i64 i = binf; i < bsup; i++) {
 		/* generate the i-th row of the matrix */
 
 		/* diagonal entry */
+		k = Ap[i];
 		Aj[k-kini] = i;
 		Ax[k-kini] = scale_a + scale_b * normal_deviate(i, i);
 
@@ -174,10 +185,7 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 				r++;
 			}
 		}
-		k += r;
 	}
-	if(rang!=nbp-1)
-		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
 
 	double stop = wtime();
 	if(rang ==0){
