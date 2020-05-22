@@ -41,6 +41,7 @@ int *rcounts ;
 
 i64 binf;
 i64 bsup;
+i64 kini = 0;
 struct csr_matrix_t {
 	i64 n;			// dimension (64-bit)
 	i64 nz;			// number of non-zero entries (64-bit)
@@ -122,14 +123,21 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 
 	binf = rang * (n / nbp);
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-	i64 kini = 0;
 	if(rang!=0)
-		MPI_Recv(&kini, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&k, 1, MPI_INT64_T, rang-1, 0, MPI_COMM_WORLD, &status);
+	kini = k;
 	for (i64 i = binf; i < bsup; i++) {
 		i64 r = 1;
 		Ap[i] = k;
 		for (i64 l = binf*(rang!=0)+1*(rang==0); l < bsup; l *= 2) {
-			r+=(i + l < bsup)*1+(0 <= i -l)*1;
+			i64 u = i + l;
+			i64 v = i - l;
+			if (u < bsup) {
+				r++;
+			}
+			if (0 <= v) {
+				r++;
+			}
 		}
 		k += r;
 	}
@@ -142,16 +150,20 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 		err(1, "Cannot allocate Aj sparse matrix");
 	if(Ax == NULL )
 		err(1, "Cannot allocate Ax sparse matrix");
-
-
+	/*
+	Comme on a un décalage d'indice dans l'écriture de Aj et Ax de K_initiale
+	Il faut le prendre en compte dans toutes les boucles suivantes.
+	On doit donc toujours écrire et lire à 		Aj[indice-kini]
+																				et 	Ax[indice-kini]
+	*/
 
 	for (i64 i = binf; i < bsup; i++) {
 		/* generate the i-th row of the matrix */
 
 		/* diagonal entry */
-		Ap[i] = k;
-		Aj[k] = i;
-		Ax[k] = scale_a + scale_b * normal_deviate(i, i);
+		k = Ap[i];
+		Aj[k-kini] = i;
+		Ax[k-kini] = scale_a + scale_b * normal_deviate(i, i);
 
 		/* other entries of the i-th row (below and above diagonal) */
 		i64 r = 1;
@@ -159,22 +171,17 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 			i64 u = i + l;
 			i64 v = i - l;
 			if (u < bsup) {
-				Aj[k + r] = u;
-				Ax[k + r] = -1 + normal_deviate(i*u, i+u);
+				Aj[k + r -kini] = u;
+				Ax[k + r -kini] = -1 + normal_deviate(i*u, i+u);
 				r++;
 			}
 			if (0 <= v) {
-				Aj[k + r] = v;
-				Ax[k + r] = -1 + normal_deviate(i*v, i+v);
+				Aj[k + r -kini] = v;
+				Ax[k + r -kini] = -1 + normal_deviate(i*v, i+v);
 				r++;
 			}
 		}
-		k += r;
 	}
-	Ap[bsup] = k;
-	if(rang!=nbp-1)
-		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
-
 	double stop = wtime();
 	if(rang ==0){
 		fprintf(stderr, "     ---> nnz = %" PRId64 "\n", k);
@@ -202,8 +209,8 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 	for (i64 i = binf; i < bsup; i++) {
 		d[i] = 0.0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++)
-			if (i == Aj[u])
-				d[i] += Ax[u];
+			if (i == Aj[u-kini])
+				d[i] += Ax[u-kini];
 	}
 }
 
@@ -217,8 +224,8 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	for (i64 i = binf; i < bsup; i++) {
 		y[i] = 0;
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++) {
-			i64 j = Aj[u];
-			double A_ij = Ax[u];
+			i64 j = Aj[u-kini];
+			double A_ij = Ax[u-kini];
 			y[i] += A_ij * x[j];
 		}
 	}
