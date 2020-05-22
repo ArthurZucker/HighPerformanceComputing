@@ -151,8 +151,8 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 
 	// i64 *Aj = malloc(nzmax * sizeof(*Ap));
 	// double *Ax = malloc(nzmax * sizeof(*Ax));
-	i64 *Aj = malloc(Ap[bsup]-Ap[binf] * sizeof(*Aj));
-	double *Ax = malloc(Ap[bsup]-Ap[binf] * sizeof(*Ax));
+	i64 *Aj = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Aj));
+	double *Ax = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Ax));
 	if(Aj == NULL ){
 		err(1, " rang: %d Cannot allocate Aj sparse matrix",rang);
 		exit(0);
@@ -409,7 +409,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(450000, 5);
+	struct csr_matrix_t *A = build_mm(450000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
