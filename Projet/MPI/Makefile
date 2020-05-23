@@ -5,7 +5,7 @@ SEED = 42
 CFLAGS = -O3 -Wall -Wextra -g
 LDLIBS = -lm
 MATRIX = cfd2
-FILE = cg_challenge_opt1
+FILE = cg_challenge_opt
 all : ${FILE}
 cg_challenge : ${FILE}.o mmio.o
 mmio.o : mmio.c mmio.h

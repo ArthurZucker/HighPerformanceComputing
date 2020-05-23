@@ -166,8 +166,6 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 		fprintf(stderr, "     ---> CSR matrix size = %.1fMbyte\n", 1e-6 * (16. * k + 8. * n));
 	}
 
-	fprintf(stderr, "rang %d : %ld\n", rang, Ap[bsup]-Ap[binf] );
-
 	A->n = n;
 	A->nz = Ap[bsup] - Ap[binf];
 	A->Ap = Ap;
@@ -338,7 +336,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 	}
 	if(rang==0)
-		fprintf(stderr, "Temp moyen passé dans les allgather %.2fs\n", cpt/nbp);
+		fprintf(stderr, "Temp moyen passé dans les  allgather %.2fs\n", cpt/nbp);
 }
 
 /******************************* main program *********************************/
@@ -375,7 +373,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(450000, 5);
+	struct csr_matrix_t *A = build_mm(45000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
