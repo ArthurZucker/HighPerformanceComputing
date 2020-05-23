@@ -222,8 +222,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
 		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
 	}
-	if (rang == 0)
-		fprintf(stderr, "\n%d : reste = %d \n", rang,n % nbp);
 	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
 
 	displs[0] = 0;
@@ -443,6 +441,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 	}
 	fprintf(stderr, "   allgather %.2fs\n", cpt);
+	
 }
 
 /******************************* main program *********************************/
@@ -461,14 +460,6 @@ int main(int argc, char **argv)
 	MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &nbp);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rang);
-
-	int c=0;
-	#pragma omp parallel
-	{
-	c++;
-	printf("c=%d thread %d\n",
-	c, omp_get_num_threads());
-	}
 
 	/* Parse command-line options */
 	long long seed = 0;

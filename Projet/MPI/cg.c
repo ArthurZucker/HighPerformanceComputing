@@ -217,9 +217,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
 		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
 	}
-
-	if (rang == 0)
-		fprintf(stderr, "\n%d : reste = %d \n", rang,n % nbp);
 	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
 
 	displs[0] = 0;
