@@ -209,7 +209,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 	bsup = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
 
 	/* VERSION SCATTERV*/
-	int u1 = rang * (n / nbp);
 	int *displs  = (int *)malloc(nbp * sizeof(int));
 	int *scounts = (int *)malloc(nbp * sizeof(int));
 	displs[0] = 0;
@@ -229,18 +228,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 		if (i > 0)
 			displs[i] = displs[i - 1] + scounts[i - 1]; //pointeur sur où écrire
 	}
-	int u2 = ((rang + 1) * (n / nbp))*(rang!=nbp-1) + n*(rang==nbp-1);
-	if(rang==0){
-		MPI_Scatterv(Aj, scounts, displs, MPI_INT	, MPI_IN_PLACE, 0, MPI_INT	, 0, MPI_COMM_WORLD);
-		MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE,MPI_IN_PLACE, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	}
-	else{
-		MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
-		MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	}
-
-	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_INT	, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[u1]], (Ap[u2] - Ap[u1]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
@@ -310,7 +297,6 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
 		{
-			//if (rang==1) fprintf(stderr, "Ax[%d] = %f\n",u,Ax[u] );
 			if (i == Aj[u])
 				d[i] += Ax[u];
 		}
@@ -404,7 +390,6 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
-		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		start1 = MPI_Wtime();
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		stop1 = MPI_Wtime();
