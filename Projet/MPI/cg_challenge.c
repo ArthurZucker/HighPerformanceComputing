@@ -301,6 +301,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		sp_gemv(A, p, q);	/* q <-- A.p */
 		double alpha = old_rz / dot(n, p, q);
 
+		fprintf(stderr, "%f\n", alpha);
 		for (i64 i = binf; i < bsup; i++)
 		{
 			x[i] += alpha * p[i]; 	// x <-- x + alpha*p
