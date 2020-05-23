@@ -302,6 +302,7 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 		d[i] = 0.0;
 		for (int u = Ap[i]; u < Ap[i + 1]; u++)
 		{
+			//if (rang==1) fprintf(stderr, "Ax[%d] = %f\n",u,Ax[u] );
 			if (i == Aj[u])
 				d[i] += Ax[u];
 		}
@@ -399,6 +400,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
+		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		start1 = MPI_Wtime();
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		stop1 = MPI_Wtime();
@@ -441,7 +443,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 	}
 	fprintf(stderr, "   allgather %.2fs\n", cpt);
-	
+
 }
 
 /******************************* main program *********************************/

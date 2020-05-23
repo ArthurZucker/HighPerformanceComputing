@@ -418,15 +418,24 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
+<<<<<<< HEAD
 	struct csr_matrix_t *A = build_mm(4500, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
 	double *mem = malloc((7 * ( n/nbp + (n % nbp) * (rang == nbp - 1)) + n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
+=======
+	struct csr_matrix_t *A = build_mm(450, 5);
+
+	/* Allocate memory */
+	i64 n = A->n;
+	double *mem = malloc((7 * ( n/nbp + (n % nbp) * (rang == nbp - 1)) +n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
+>>>>>>> 5eacbf316268cbb671c98fb4cdf745ef11209bd6
 	if (mem == NULL)
 		err(1, "cannot allocate dense vectors");
 	double *x = mem;	/* solution vector */
 	double *b = mem + n/nbp  + (n % nbp) * (rang == nbp - 1);	/* right-hand side */
+<<<<<<< HEAD
 	double *scratch = mem + (2 * n/nbp)  + (2*(n % nbp) * (rang == nbp - 1));	/* workspace for cg_solve() */
 
 	/* Prepare right-hand size */
@@ -435,6 +444,13 @@ int main(int argc, char **argv)
 		// if(rang==1)
 		// 	fprintf(stderr, "b[%d]=%f\n",i-binf,b[i-binf]);
 	}
+=======
+	double *scratch = mem + 2 * n/nbp  + 2*(n % nbp) * (rang == nbp - 1);;	/* workspace for cg_solve() */
+
+	/* Prepare right-hand size */
+	for (i64 i = binf; i < bsup; i++)
+		b[(i-binf)] = PRF(i, seed);
+>>>>>>> 5eacbf316268cbb671c98fb4cdf745ef11209bd6
 
 	displs  = (int *)calloc(nbp, sizeof(int));
 	rcounts = (int *)calloc(nbp, sizeof(int));
