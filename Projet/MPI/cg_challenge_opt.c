@@ -223,9 +223,9 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	double *Ax = A->Ax;
 	for (i64 i = binf; i < bsup; i++) {
 		i64 i2 = i-binf;
-		if(rang==1) fprintf(stderr, "x[%d]=%f\n",i,x[i]);
+		//if(rang==1) fprintf(stderr, "x[%d]=%f\n",i,x[i]);
 		y[i2] = 0;
-		if(rang==1) fprintf(stderr, "x[%d]=%f\n",i,x[i]);
+		//if(rang==1) fprintf(stderr, "x[%d]=%f\n",i,x[i]);
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++) {
 			i64 u2 = (u-kini);
 			i64 j = Aj[u2];
@@ -289,11 +289,19 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (16.0 * nz + 52.0 * n));
 		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
 	}
-	double *r = scratch + (n/nbp) + ((n % nbp) * (rang == nbp - 1));	// residue
-	double *z = scratch + (2 * n/nbp) + (2*(n % nbp) * (rang == nbp - 1));	// preconditioned-residue
-	double *p = scratch + (2 * n/nbp) + n + (2*(n % nbp) * (rang == nbp - 1));	// search direction
-	double *q = scratch + (3 * n/nbp) + n + (3*(n % nbp) * (rang == nbp - 1));	// q == Ap
-	double *d = scratch + (4 * n/nbp) + n + (4*(n % nbp) * (rang == nbp - 1));	// diagonal entries of A (Jacobi preconditioning)
+	// double *r = scratch + (n/nbp) + ((n % nbp) * (rang == nbp - 1));	// residue
+	// double *z = scratch + (2 * n/nbp) + (2*(n % nbp) * (rang == nbp - 1));	// preconditioned-residue
+	// double *p = scratch + (2 * n/nbp) + n + (2*(n % nbp) * (rang == nbp - 1));	// search direction
+	// double *q = scratch + (3 * n/nbp) + n + (3*(n % nbp) * (rang == nbp - 1));	// q == Ap
+	// double *d = scratch + (4 * n/nbp) + n + (4*(n % nbp) * (rang == nbp - 1));	// diagonal entries of A (Jacobi preconditioning)
+	double *r = scratch;// + (n/nbp) + ((n % nbp) * (rang == nbp - 1));	// residue
+	double *z = scratch + (n/nbp) + (2*(n % nbp) * (rang == nbp - 1));	// preconditioned-residue
+	double *p = scratch + (2 * n/nbp) + (2*(n % nbp) * (rang == nbp - 1));	// search direction
+	double *q = scratch + (2 * n/nbp) + n + (3*(n % nbp) * (rang == nbp - 1));	// q == Ap
+	double *d = scratch + (3 * n/nbp) + n + (4*(n % nbp) * (rang == nbp - 1));	// diagonal entries of A (Jacobi preconditioning)
+
+	//fprintf(stderr, "rang %d : %ld\n",rang,(4*(n % nbp) * (rang == nbp - 1)));
+
 	int nnz_all = A->Ap[n];
 	if(rang==0)
 		MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
@@ -363,12 +371,12 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		stop1 = MPI_Wtime();
 		cpt+=stop1-start1;
 
-		if(rang==1 && temp==0){
-			for (i64 i = 0; i < n; i++){
-				fprintf(stderr, "p[%ld] = %f\n",i,p[i]);
-			}
-		}
-		temp++;
+		// if(rang==1 && temp==0){
+		// 	for (i64 i = 0; i < n; i++){
+		// 		fprintf(stderr, "p[%ld] = %f\n",i,p[i]);
+		// 	}
+		// }
+		// temp++;
 		// ERREUR ICIIIIIIIII
 		sp_gemv(A, p, q);	/* q <-- A.p */
 
@@ -383,7 +391,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		// fin ERREUR ICIIIIIIII
 		if(rang==0 && temp==0) fprintf(stderr, "%f\n",alpha );
 		temp++;
-		exit(EXIT_SUCCESS);
+		//exit(EXIT_SUCCESS);
 		for (i64 i = binf; i < bsup; i++)
 		{
 			i64 i2 = i-binf;
@@ -460,15 +468,16 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(45000, 5);
+	struct csr_matrix_t *A = build_mm(450000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
-	double *mem = malloc((7 * ( n/nbp + (n % nbp) * (rang == nbp - 1)) + n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
+	fprintf(stderr, "allocation %d\n", (7 * ( n/nbp + ((n % nbp) * (rang == nbp - 1))) + n));
+	double *mem = malloc((7 * ( n/nbp + ((n % nbp) * (rang == nbp - 1))) + n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
 	if (mem == NULL)
 		err(1, "cannot allocate dense vectors");
 	double *x = mem;	/* solution vector */
-	double *b = mem + (n/nbp)  + (n % nbp) * (rang == nbp - 1);	/* right-hand side */
+	double *b = mem + (n/nbp)  + ((n % nbp) * (rang == nbp - 1));	/* right-hand side */
 	double *scratch = mem + (2 * n/nbp)  + (2*(n % nbp) * (rang == nbp - 1));	/* workspace for cg_solve() */
 
 	// fprintf(stderr, "%d\n",bsup-binf);
