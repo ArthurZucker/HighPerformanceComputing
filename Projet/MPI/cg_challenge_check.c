@@ -146,23 +146,15 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 	if(rang!=nbp-1)
 		MPI_Isend(&k, 1, MPI_INT64_T, rang+1, 0, MPI_COMM_WORLD, &request);
 
-	fprintf(stderr, "rang %d Ap[bsup]-Ap[binf]: %ld\n", rang, Ap[bsup]-Ap[binf] );
-	fprintf(stderr, "rang %d nzmax = %ld\n", rang, nzmax );
-
-	// i64 *Aj = malloc(nzmax * sizeof(*Ap));
-	// double *Ax = malloc(nzmax * sizeof(*Ax));
 	i64 *Aj = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Aj));
 	double *Ax = malloc((Ap[bsup]-Ap[binf]) * sizeof(*Ax));
 	if(Aj == NULL ){
 		err(1, " rang: %d Cannot allocate Aj sparse matrix",rang);
-		exit(0);
 	}
 	if(Ax == NULL ){
 		err(1, "Cannot allocate Ax sparse matrix");
 	}
-	else{
-		fprintf(stderr,"rang %d : ok\n", rang);
-	}
+
 	/*
 	Comme on a un décalage d'indice dans l'écriture de Aj et Ax de K_initiale
 	Il faut le prendre en compte dans toutes les boucles suivantes.
@@ -253,7 +245,6 @@ double dot(const i64 n, const double *x, const double *y)
 	double sum = 0.0;
 	for (i64 i = binf; i < bsup; i++)
 		sum += x[i] * y[i];
-	// fprintf(stderr, "%d : dot\n",rang );
 	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	return sum;
 }
@@ -283,19 +274,15 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double *p = scratch + 3 * n;	// search direction
 	double *q = scratch + 4 * n;	// q == Ap
 	double *d = scratch + 5 * n;	// diagonal entries of A (Jacobi preconditioning)
-	int nnz_all = A->Ap[n];
+	int nz_all = A->Ap[n];
 	if(rang==0)
-		MPI_Reduce(MPI_IN_PLACE, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+		MPI_Reduce(MPI_IN_PLACE, &nz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
 	else
-		MPI_Reduce(&nnz_all, &nnz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+		MPI_Reduce(&nz_all, &nz_all, 1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
 
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
-	// if(rang==0){
-	// 	for(i64 i=binf;i<bsup;i++){
-	// 		fprintf(stderr, "d[%ld]=%f\n",i,d[i]);
-	// 	}
-	// }
+
 	/*
 	 * This function follows closely the pseudo-code given in the (english)
 	 * Wikipedia page "Conjugate gradient method". This is the version with
@@ -311,11 +298,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	}
 
 	double rz = dot(n, r, z);
-	// if(rang==0){
-	// 	for(i64 i=binf;i<bsup;i++){
-	// 		fprintf(stderr, "z[%ld]=%f\n",i,z[i]);
-	// 	}
-	// }
+
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
@@ -323,17 +306,19 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double stop1;
 	double cpt=0.0;
 	double norme = norm(n, r);
+
+	int temp = 0;
 	while (norme > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
 		start1 = MPI_Wtime();
-		// fprintf(stderr, "%d : allgather\n",rang );
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		stop1 = MPI_Wtime();
 		cpt+=stop1-start1;
 
 		sp_gemv(A, p, q);	/* q <-- A.p */
+
 		double alpha = old_rz / dot(n, p, q);
 
 		for (i64 i = binf; i < bsup; i++)
@@ -354,8 +339,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			if (t - last_display > 0.5) {
 				/* verbosity */
 				double rate = iter / (t - start);	// iterations per s.
-				//int nz = A->Ap[n];
-				int nz = nnz_all;
+				int nz = nz_all;
 				double GFLOPs = 1e-9 * rate * (2 * nz + 12 * n);
 				fprintf(stderr, "\r     ---> error : %2.2e, iter : %d (%.1f it/s, %.2f GFLOPs)", norme, iter, rate, GFLOPs);
 				fflush(stdout);
