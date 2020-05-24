@@ -223,10 +223,13 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 	double *Ax = A->Ax;
 	for (i64 i = binf; i < bsup; i++) {
 		i64 i2 = i-binf;
+		if(rang==1) fprintf(stderr, "x[%d]=%f\n",i,x[i]);
 		y[i2] = 0;
+		if(rang==1) fprintf(stderr, "x[%d]=%f\n",i,x[i]);
 		for (i64 u = Ap[i]; u < Ap[i + 1]; u++) {
 			i64 u2 = (u-kini);
 			i64 j = Aj[u2];
+			// if(rang==1) fprintf(stderr, "x[%d]=%f\n",j,x[j]);
 			double A_ij = Ax[u2];
 			y[i2] += A_ij * x[j];
 		}
@@ -247,6 +250,7 @@ double dot(const i64 n, const double *x, const double *y)
 	}
 	// fprintf(stderr, "%d : dot\n",rang );
 	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	// fprintf(stderr, "%f\n",sum);
 	return sum;
 }
 
@@ -260,6 +264,7 @@ double dot_p(const i64 n, const double *x, const double *y)
 
 	// fprintf(stderr, "%d : dot\n",rang );
 	MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	// fprintf(stderr, "dot_p : %f\n",sum);
 	return sum;
 }
 
@@ -284,7 +289,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "     ---> Working set : %.1fMbyte\n", 1e-6 * (16.0 * nz + 52.0 * n));
 		fprintf(stderr, "     ---> Per iteration: %.2g FLOP in sp_gemv() and %.2g FLOP in the rest\n", 2. * nz, 12. * n);
 	}
-	double *r = scratch + n/nbp + ((n % nbp) * (rang == nbp - 1));	// residue
+	double *r = scratch + (n/nbp) + ((n % nbp) * (rang == nbp - 1));	// residue
 	double *z = scratch + (2 * n/nbp) + (2*(n % nbp) * (rang == nbp - 1));	// preconditioned-residue
 	double *p = scratch + (2 * n/nbp) + n + (2*(n % nbp) * (rang == nbp - 1));	// search direction
 	double *q = scratch + (3 * n/nbp) + n + (3*(n % nbp) * (rang == nbp - 1));	// q == Ap
@@ -297,9 +302,9 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
-	// if(rang==0){
+	// if(rang==1){
 	// 	for(i64 i=binf;i<bsup;i++){
-	// 		fprintf(stderr, "d[%ld]=%f\n",i,d[i]);
+	// 		fprintf(stderr, "d[%ld]=%f\n",i,d[i-binf]);
 	// 	}
 	// }
 	/*
@@ -311,14 +316,33 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	/* We use x == 0 --- this avoids the first matrix-vector product. */
 	for (i64 i = binf; i < bsup; i++){
 		i64 i2 = i-binf;
+		// if(rang==1)
+		// 	fprintf(stderr, "%d\n",i2 );
 		x[i2] = 0.0;
 		r[i2] = b[i2];
 		z[i2] = r[i2] / d[i2];
 		p[i] = z[i2];
+		// if(rang==0)
+		// 	fprintf(stderr, "b[%d]=%f\n",i2,b[i2]);
 	}
 
+	// if(rang==0) {
+	// 	for (i64 i = 0; i < n; i++){
+	// 		fprintf(stderr, "p[%ld] = %f\n",i,p[i]);
+	// 	}
+	// }
+	// if(rang==0) {
+	// 	for (i64 i = binf; i < bsup; i++){
+	// 		fprintf(stderr, "d[%ld] = %f\n",i,d[i]);
+	// 	}
+	// }
 	double rz = dot(n, r, z);
 
+	// if(rang==0){
+	// 	for (i64 i = 0; i < n; i++){
+	// 		fprintf(stderr, "p[%ld] = %f\n",i,p[i]);
+	// 	}
+	// }
 
 	double start = wtime();
 	double last_display = start;
@@ -328,7 +352,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double cpt=0.0;
 	double norme = norm(n, r);
 
-
+	int temp = 0;
 	while (norme > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
@@ -339,9 +363,27 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		stop1 = MPI_Wtime();
 		cpt+=stop1-start1;
 
+		if(rang==1 && temp==0){
+			for (i64 i = 0; i < n; i++){
+				fprintf(stderr, "p[%ld] = %f\n",i,p[i]);
+			}
+		}
+		temp++;
+		// ERREUR ICIIIIIIIII
 		sp_gemv(A, p, q);	/* q <-- A.p */
 
-		double alpha = old_rz / dot_p(n, p, q);
+		// if(rang==1 && temp==0) {
+		// 	for (i64 i = binf; i < bsup; i++){
+		// 		fprintf(stderr, "q[%ld] = %f\n",i,q[i-binf]);
+		// 	}
+		// }
+		// temp++;
+
+		double alpha = old_rz / dot_p(n, p, q); // pas le même
+		// fin ERREUR ICIIIIIIII
+		if(rang==0 && temp==0) fprintf(stderr, "%f\n",alpha );
+		temp++;
+		exit(EXIT_SUCCESS);
 		for (i64 i = binf; i < bsup; i++)
 		{
 			i64 i2 = i-binf;
@@ -418,7 +460,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(4500, 5);
+	struct csr_matrix_t *A = build_mm(45000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
@@ -426,8 +468,10 @@ int main(int argc, char **argv)
 	if (mem == NULL)
 		err(1, "cannot allocate dense vectors");
 	double *x = mem;	/* solution vector */
-	double *b = mem + n/nbp  + (n % nbp) * (rang == nbp - 1);	/* right-hand side */
+	double *b = mem + (n/nbp)  + (n % nbp) * (rang == nbp - 1);	/* right-hand side */
 	double *scratch = mem + (2 * n/nbp)  + (2*(n % nbp) * (rang == nbp - 1));	/* workspace for cg_solve() */
+
+	// fprintf(stderr, "%d\n",bsup-binf);
 
 	/* Prepare right-hand size */
 	for (i64 i = binf; i < bsup; i++){
@@ -448,23 +492,23 @@ int main(int argc, char **argv)
 	cg_solve(A, b, x, THRESHOLD, scratch);
 
 	/* Check result */
-	if (safety_check)
-	{
-		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
-		double *y = scratch;
-		sp_gemv(A, x, y);											  // y = Ax
-		for (i64 i = binf; i < bsup; i++) // y = Ax - b
-			y[(i-binf)] -= b[(i-binf)];
-		double norme = norm(n, y);
-		if (rang == 0)
-		{
-			fprintf(stderr, "[check] max error = %2.2e\n", norme);
-		}
-	}
-	else
-	{
-		MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	}
+	// if (safety_check)
+	// {
+	// 	MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+	// 	double *y = scratch;
+	// 	sp_gemv(A, x, y);											  // y = Ax
+	// 	for (i64 i = binf; i < bsup; i++) // y = Ax - b
+	// 		y[(i-binf)] -= b[(i-binf)];
+	// 	double norme = norm(n, y);
+	// 	if (rang == 0)
+	// 	{
+	// 		fprintf(stderr, "[check] max error = %2.2e\n", norme);
+	// 	}
+	// }
+	// else
+	// {
+	// 	MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, x, rcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	// }
 
 	/* Dump the solution vector */
 	if (rang == 0)
