@@ -409,11 +409,11 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(450000, 5);
+	struct csr_matrix_t *A = build_mm(4500000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
-	double *mem = malloc((7 * ( n/nbp + ((n % nbp) * (rang == nbp - 1))) + n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
+	double *mem = malloc((6 * ( n/nbp + ((n % nbp) * (rang == nbp - 1))) + n) * sizeof(double)); /* WARNING, THIS ALLOCATES 26GB. */
 	if (mem == NULL)
 		err(1, "cannot allocate dense vectors");
 	double *x = mem;	/* solution vector */
