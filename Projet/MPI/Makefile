@@ -5,12 +5,14 @@ SEED = 42
 CFLAGS = -O3 -Wall -Wextra -g
 LDLIBS = -lm
 MATRIX = cfd2
-FILE = cg_challenge_opt
+FILE = cg_challenge checker cg
 all : ${FILE}
-cg_challenge : ${FILE}.o mmio.o
+cg_challenge : cg_challenge.o
 mmio.o : mmio.c mmio.h
-cg_challenge.o : ${FILE}.c mmio.h
-
+cg_challenge.o : cg_challenge.c
+checker : checker.c mmio.o
+cg.o : cg.c mmio.h
+cg : cg.o mmio.o
 run :
 	mpirun -n 40 -mca bt1_tcp_if_include eth0 -hostfile hostfile305 --map-by node sh -c "zcat /Infos/lmd/2019/master/ue/MU4IN903-2020fev/${MATRIX}.mtx.gz  | ./cg  --seed ${SEED} "> x.txt
 run2:

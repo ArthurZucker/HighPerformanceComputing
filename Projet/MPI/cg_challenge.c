@@ -98,7 +98,6 @@ static double normal_deviate(i64 i, i64 j)
 /* Generate a pseudo-random symetric positive definite matrix of size n. */
 struct csr_matrix_t *build_mm(i64 n, double easyness)
 {
-	i64 nzmax = 64 * n; /* this is a crude upper-bound */
 
 	/* -------- Directly assemble a CSR matrix ----- */
 	double start = wtime();
@@ -199,7 +198,6 @@ struct csr_matrix_t *build_mm(i64 n, double easyness)
 /* Copy the diagonal of A into the vector d. */
 void extract_diagonal(const struct csr_matrix_t *A, double *d)
 {
-	i64 n = A->n;
 	i64 *Ap = A->Ap;
 	i64 *Aj = A->Aj;
 	double *Ax = A->Ax;
@@ -217,7 +215,6 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 /* Matrix-vector product (with A in CSR format) : y = Ax */
 void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 {
-	i64 n = A->n;
 	i64 *Ap = A->Ap;
 	i64 *Aj = A->Aj;
 	double *Ax = A->Ax;
@@ -238,7 +235,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 /*************************** Vector operations (unchaged) ********************************/
 
 /* dot product */
-double dot(const i64 n, const double *x, const double *y)
+double dot(const double *x, const double *y)
 {
 	double sum = 0.0;
 	for (i64 i = binf; i < bsup; i++){
@@ -249,7 +246,7 @@ double dot(const i64 n, const double *x, const double *y)
 	return sum;
 }
 
-double dot_p(const i64 n, const double *x, const double *y)
+double dot_p(const double *x, const double *y)
 {
 	double sum = 0.0;
 	for (i64 i = binf; i < bsup; i++){
@@ -262,9 +259,9 @@ double dot_p(const i64 n, const double *x, const double *y)
 
 
 /* euclidean norm (a.k.a 2-norm) */
-double norm(const i64 n, const double *x)
+double norm(const double *x)
 {
-	return sqrt(dot(n, x, x));
+	return sqrt(dot(x, x));
 }
 
 /*********************** conjugate gradient algorithm (unchanged) *************************/
@@ -310,7 +307,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		p[i] = z[i2];
 	}
 
-	double rz = dot(n, r, z);
+	double rz = dot(r, z);
 
 	double start = wtime();
 	double last_display = start;
@@ -318,9 +315,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	double start1;
 	double stop1;
 	double cpt=0.0;
-	double norme = norm(n, r);
-
-	int temp = 0;
+	double norme = norm(r);
 	while (norme > epsilon) {
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
@@ -332,7 +327,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 
 		sp_gemv(A, p, q);	/* q <-- A.p */
 
-		double alpha = old_rz / dot_p(n, p, q); // pas le même
+		double alpha = old_rz / dot_p(p, q); // pas le même
 
 		for (i64 i = binf; i < bsup; i++)
 		{
@@ -341,7 +336,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			r[i2] -= alpha * q[i2]; 	// r <-- r - alpha*q
 			z[i2] = r[i2] / d[i2];	 	// z <-- M^(-1).r
 		}
-		rz = dot(n, r, z);	// restore invariant
+		rz = dot(r, z);	// restore invariant
 		double beta = rz / old_rz;
 		for (i64 i = binf; i < bsup; i++){	// p <-- z + beta*p
 			i64 i2 = i-binf;
@@ -349,7 +344,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		}
 		iter++;
 		double t = wtime();
-		norme = norm(n, r);
+		norme = norm(r);
 		if(rang==0)
 		{
 			if (t - last_display > 0.5) {
@@ -393,7 +388,6 @@ int main(int argc, char **argv)
 	/* Parse command-line options */
 	long long seed = 0;
 	char *solution_filename = NULL;
-	int safety_check = 1;
 	char ch;
 	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (ch) {

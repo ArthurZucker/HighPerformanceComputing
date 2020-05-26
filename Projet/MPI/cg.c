@@ -288,7 +288,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 /* Copy the diagonal of A into the vector d. */
 void extract_diagonal(const struct csr_matrix_t *A, double *d)
 {
-	int n = A->n;
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
@@ -306,7 +305,6 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 /* Matrix-vector product (with A in CSR format) : y = Ax */
 void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 {
-	int n = A->n;
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
@@ -326,7 +324,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 /*************************** Vector operations ********************************/
 
 /* dot product */
-double dot(const int n, const double *x, const double *y)
+double dot( const double *x, const double *y)
 {
 	double sum = 0.0;
 	for (int i = binf; i < bsup; i++)
@@ -336,9 +334,9 @@ double dot(const int n, const double *x, const double *y)
 }
 
 /* euclidean norm (a.k.a 2-norm) */
-double norm(const int n, const double *x)
+double norm(const double *x)
 {
-	return sqrt(dot(n, x, x));
+	return sqrt(dot(x, x));
 }
 
 /*********************** conjugate gradient algorithm *************************/
@@ -377,11 +375,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		p[i] = z[i];
 	}
 
-	double rz = dot(n, r, z);
+	double rz = dot(r, z);
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
-	double norme = norm(n, r);
+	double norme = norm(r);
 	double start1;
 	double stop1;
 	double cpt=0.0;
@@ -396,7 +394,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		cpt+=stop1-start1;
 
 		sp_gemv(A, p, q); /* q <-- A.p */
-		double alpha = old_rz / dot(n, p, q);
+		double alpha = old_rz / dot(p, q);
 
 		for (int i = binf; i < bsup; i++)
 		{
@@ -404,12 +402,12 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
 			z[i] = r[i] / d[i];	 	// z <-- M^(-1).r
 		}
-		rz = dot(n, r, z); 			// restore invariant
+		rz = dot(r, z); 			// restore invariant
 		double beta = rz / old_rz;
 		for (int i = binf; i < bsup; i++) // p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
-		norme = norm(n, r);
+		norme = norm( r);
 		double t = wtime();
 		if (rang == 0)
 		{
@@ -538,7 +536,7 @@ int main(int argc, char **argv)
 		sp_gemv(A, x, y);											  // y = Ax
 		for (int i = binf; i < bsup; i++) // y = Ax - b
 			y[i] -= b[i];
-		double norme = norm(n, y);
+		double norme = norm(y);
 		if (rang == 0)
 		{
 			fprintf(stderr, "[check] max error = %2.2e\n", norme);
