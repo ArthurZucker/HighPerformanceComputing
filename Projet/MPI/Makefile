@@ -8,8 +8,8 @@ MATRIX = cfd2
 FILE = cg_challenge checker cg
 all : ${FILE}
 cg_challenge : cg_challenge.o
-mmio.o : mmio.c mmio.h
 cg_challenge.o : cg_challenge.c
+mmio.o : mmio.c mmio.h
 checker : checker.c mmio.o
 cg.o : cg.c mmio.h
 cg : cg.o mmio.o
