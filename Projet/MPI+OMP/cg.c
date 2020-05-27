@@ -222,10 +222,8 @@ struct csr_matrix_t *load_mm(FILE *f)
 		scounts[i] = (n / nbp) + 1 + (n % nbp) * (i == nbp - 1); //combien d'infos j'envoie
 		displs[i] = i * (n / nbp);								 //pointeur sur où écrire
 	}
-	if (rang == 0)
-		fprintf(stderr, "\n%d : reste = %d \n", rang,n % nbp);
 	MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], scounts[rang], MPI_INT, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ap, scounts, displs, MPI_INT, &Ap[binf], (n % nbp) * (rang == nbp - 1) + 1 + (n / nbp), MPI_INT, 0, MPI_COMM_WORLD);
+
 	displs[0] = 0;
 	for (int i = 0; i < nbp; i++)
 	{
@@ -237,8 +235,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 	}
 	MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
 	MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Aj, scounts, displs, MPI_INT	, &Aj[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_INT	, 0, MPI_COMM_WORLD);
-	// MPI_Scatterv(Ax, scounts, displs, MPI_DOUBLE, &Ax[Ap[binf]], (Ap[bsup] - Ap[binf]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	// if (rang==nbp-1)
 	// {
@@ -297,7 +293,6 @@ struct csr_matrix_t *load_mm(FILE *f)
 /* Copy the diagonal of A into the vector d. */
 void extract_diagonal(const struct csr_matrix_t *A, double *d)
 {
-	int n = A->n;
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
@@ -316,11 +311,9 @@ void extract_diagonal(const struct csr_matrix_t *A, double *d)
 /* Matrix-vector product (with A in CSR format) : y = Ax */
 void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 {
-	int n = A->n;
 	int *Ap = A->Ap;
 	int *Aj = A->Aj;
 	double *Ax = A->Ax;
-
 	#pragma omp parallel for schedule(guided)
 	for (int i = binf; i < bsup; i++)
 	{
@@ -337,7 +330,7 @@ void sp_gemv(const struct csr_matrix_t *A, const double *x, double *y)
 /*************************** Vector operations ********************************/
 
 /* dot product */
-double dot(const int n, const double *x, const double *y)
+double dot(const double *x, const double *y)
 {
 	double sum = 0.0;
 	#pragma omp parallel for reduction(+:sum)
@@ -348,9 +341,9 @@ double dot(const int n, const double *x, const double *y)
 }
 
 /* euclidean norm (a.k.a 2-norm) */
-double norm(const int n, const double *x)
+double norm(const double *x)
 {
-	return sqrt(dot(n, x, x));
+	return sqrt(dot( x, x));
 }
 
 /*********************** conjugate gradient algorithm *************************/
@@ -391,11 +384,11 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	}
 
 
-	double rz = dot(n, r, z);
+	double rz = dot(r, z);
 	double start = wtime();
 	double last_display = start;
 	int iter = 0;
-	double norme = norm(n, r);
+	double norme = norm(r);
 	double start1;
 	double stop1;
 	double cpt=0.0;
@@ -404,14 +397,13 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		/* loop invariant : rz = dot(r, z) */
 		double old_rz = rz;
 		/*ALL GATHERV*/
-		//MPI_Allgatherv(&p[binf], (n / nbp) + (n % nbp) * (rang == nbp - 1 ), MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		start1 = MPI_Wtime();
 		MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_DOUBLE, p, rcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
 		stop1 = MPI_Wtime();
 		cpt+=stop1-start1;
 
 		sp_gemv(A, p, q); /* q <-- A.p */
-		double alpha = old_rz / dot(n, p, q);
+		double alpha = old_rz / dot(p, q);
 
 		#pragma omp parallel for
 		for (int i = binf; i < bsup; i++)
@@ -420,13 +412,13 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 			r[i] -= alpha * q[i]; 	// r <-- r - alpha*q
 			z[i] = r[i] / d[i];	 	// z <-- M^(-1).r
 		}
-		rz = dot(n, r, z); 			// restore invariant
+		rz = dot(r, z); 			// restore invariant
 		double beta = rz / old_rz;
 		#pragma omp parallel for
 		for (int i = binf; i < bsup; i++) // p <-- z + beta*p
 			p[i] = z[i] + beta * p[i];
 		iter++;
-		norme = norm(n, r);
+		norme = norm(r);
 		double t = wtime();
 		if (rang == 0)
 		{
@@ -447,6 +439,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 		fprintf(stderr, "\n     ---> Finished in %.1fs and %d iterations\n", wtime() - start, iter);
 	}
 	fprintf(stderr, "   allgather %.2fs\n", cpt);
+
 }
 
 /******************************* main program *********************************/
@@ -556,7 +549,7 @@ int main(int argc, char **argv)
 		#pragma omp parallel for
 		for (int i = binf; i < bsup; i++) // y = Ax - b
 			y[i] -= b[i];
-		double norme = norm(n, y);
+		double norme = norm(y);
 		if (rang == 0)
 		{
 			fprintf(stderr, "[check] max error = %2.2e\n", norme);

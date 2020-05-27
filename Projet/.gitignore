@@ -16,6 +16,9 @@
 *.exp
 cg
 *.txt
+cg_challenge_opt1
+cg_challenge
+cg_challenge_opt
 
 # Precompiled Headers
 *.gch

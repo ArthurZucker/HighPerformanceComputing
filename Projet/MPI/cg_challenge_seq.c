@@ -1,4 +1,4 @@
-/* 
+/*
  * Sequential implementation of the Conjugate Gradient Method.
  *
  * Authors : Lilia Ziane Khodja & Charles Bouillaguet
@@ -6,11 +6,11 @@
  * v1.01-challenge (2020-05-18)
  *
  * CHANGE LOG
- *  
- * USAGE: 
+ *
+ * USAGE:
  * 	$ ./cg_challenge
  *
- * This code is almost identical to the "normal" cg.c.... 
+ * This code is almost identical to the "normal" cg.c....
  * EXCEPT THAT:
  *  + most integers are now 64 bits (cf. typedef ... i64 below)
  *  + the matrix is not loaded from a file
@@ -220,7 +220,7 @@ void cg_solve(const struct csr_matrix_t *A, const double *b, double *x, const do
 	/* Isolate diagonal */
 	extract_diagonal(A, d);
 
-	/* 
+	/*
 	 * This function follows closely the pseudo-code given in the (english)
 	 * Wikipedia page "Conjugate gradient method". This is the version with
 	 * preconditionning.
@@ -298,7 +298,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Build the matrix --- WARNING, THIS ALLOCATES 400GB! */
-	struct csr_matrix_t *A = build_mm(450000000, 5);
+	struct csr_matrix_t *A = build_mm(45000000, 5);
 
 	/* Allocate memory */
 	i64 n = A->n;
@@ -312,7 +312,7 @@ int main(int argc, char **argv)
 	/* Prepare right-hand size */
 	for (i64 i = 0; i < n; i++)
 		b[i] = PRF(i, seed);
-	
+
 	/* solve Ax == b */
 	cg_solve(A, b, x, THRESHOLD, scratch);
 
